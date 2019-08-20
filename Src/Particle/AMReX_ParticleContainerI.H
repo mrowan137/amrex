@@ -1048,8 +1048,8 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
 
     // temporaries
     m_aos_r.resize(0);
-    if (NumRealComps() > 0) m_rdata_r[0].resize(0);
-    if (NumIntComps()  > 0) m_idata_r[0].resize(0);
+    Gpu::ManagedDeviceVector<Real> rdata_r;
+    Gpu::ManagedDeviceVector<int > idata_r;
     m_grids_r.resize(0);
 
     m_lo.resize(0);
@@ -1228,25 +1228,25 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                 m_grids_tmp.swap(m_grids_r);
             
                 // reorder real arrays
-                if (NumRealComps() > 0) m_rdata_r[0].resize(old_np);
+                rdata_r.resize(old_np);
                 for (int j = 0; j < NumRealComps(); ++j)
                     {
                         auto& rdata = ptile.GetStructOfArrays().GetRealData(j);
                         thrust::gather(thrust::device,
                                        m_index_sequence_tmp.begin(), m_index_sequence_tmp.end(),
-                                       rdata.begin(), m_rdata_r[0].begin());
-                        rdata.swap(m_rdata_r[0]);
+                                       rdata.begin(), rdata_r.begin());
+                        rdata.swap(rdata_r);
                     }
 
                 // reorder int arrays
-                if (NumIntComps() > 0) m_idata_r[0].resize(old_np);
+                idata_r.resize(old_np);
                 for (int j = 0; j < NumIntComps(); ++j)
                     {
                         auto& idata = ptile.GetStructOfArrays().GetIntData(j);
                         thrust::gather(thrust::device,
                                        m_index_sequence_tmp.begin(), m_index_sequence_tmp.end(),
-                                       idata.begin(), m_idata_r[0].begin());
-                        idata.swap(m_idata_r[0]);
+                                       idata.begin(), idata_r.begin());
+                        idata.swap(idata_r);
                     }
             }
 
@@ -1316,25 +1316,25 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                 aos.swap(m_aos_r);
 
                 // reorder real arrays
-                if (NumRealComps() > 0) m_rdata_r[0].resize(num_to_move);
+                rdata_r.resize(num_to_move);
                 for (int j = 0; j < NumRealComps(); ++j)
                     {
                         auto& rdata = m_real_arrays_to_redistribute[j];
                         thrust::gather(thrust::device,
                                        m_index_sequence_tmp.begin(), m_index_sequence_tmp.end(),
-                                       rdata.begin(), m_rdata_r[0].begin());
-                        rdata.swap(m_rdata_r[0]);
+                                       rdata.begin(), rdata_r.begin());
+                        rdata.swap(rdata_r);
                     }
 
                 // reorder int arrays
-                if (NumIntComps() > 0) m_idata_r[0].resize(num_to_move);
+                idata_r.resize(num_to_move);
                 for (int j = 0; j < NumIntComps(); ++j)
                     {
                         auto& idata = m_int_arrays_to_redistribute[j];
                         thrust::gather(thrust::device,
                                        m_index_sequence_tmp.begin(), m_index_sequence_tmp.end(),
-                                       idata.begin(), m_idata_r[0].begin());
-                        idata.swap(m_idata_r[0]);
+                                       idata.begin(), idata_r.begin());
+                        idata.swap(idata_r);
                     }
             }
 
