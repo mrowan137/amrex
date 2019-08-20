@@ -1228,7 +1228,7 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                 m_grids_tmp.swap(m_grids_r);
             
                 // reorder real arrays
-                m_rdata_r[0].resize(old_np);
+                if (NumRealComps() > 0) m_rdata_r[0].resize(old_np);
                 for (int j = 0; j < NumRealComps(); ++j)
                     {
                         auto& rdata = ptile.GetStructOfArrays().GetRealData(j);
@@ -1239,7 +1239,7 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                     }
 
                 // reorder int arrays
-                m_idata_r[0].resize(old_np);
+                if (NumIntComps() > 0) m_idata_r[0].resize(old_np);
                 for (int j = 0; j < NumIntComps(); ++j)
                     {
                         auto& idata = ptile.GetStructOfArrays().GetIntData(j);
