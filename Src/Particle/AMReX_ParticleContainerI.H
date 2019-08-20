@@ -1316,7 +1316,7 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                 aos.swap(m_aos_r);
 
                 // reorder real arrays
-                m_rdata_r[0].resize(num_to_move);
+                if (NumRealComps() > 0) m_rdata_r[0].resize(num_to_move);
                 for (int j = 0; j < NumRealComps(); ++j)
                     {
                         auto& rdata = m_real_arrays_to_redistribute[j];
@@ -1327,7 +1327,7 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                     }
 
                 // reorder int arrays
-                m_idata_r[0].resize(num_to_move);
+                if (NumIntComps() > 0) m_idata_r[0].resize(num_to_move);
                 for (int j = 0; j < NumIntComps(); ++j)
                     {
                         auto& idata = m_int_arrays_to_redistribute[j];
