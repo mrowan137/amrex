@@ -753,11 +753,15 @@ public:
 
     void RedistributeGPU (int lev_min = 0, int lev_max = -1, int nGrow = 0, int local=0);
 
+    void RedistributeOpt (int lev_min = 0, int lev_max = -1, int nGrow = 0, int local=0);
+
     bool OKCPU (int lev_min = 0, int lev_max = -1, int nGrow = 0) const;
 
     bool OKGPU (int lev_min = 0, int lev_max = -1, int nGrow = 0) const;
 
-#ifdef AMREX_USE_CUDA    
+#ifdef AMREX_USE_CUDA   
+    void RedistributeMPIGPU (std::map<int, SendBuffer>& not_ours);
+ 
     void EnforcePeriodicGPU ();
 #endif
 
