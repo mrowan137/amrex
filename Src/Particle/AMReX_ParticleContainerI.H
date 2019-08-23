@@ -1794,11 +1794,12 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
 	auto p_periodic_shift = op.m_periodic_shift[gid].dataPtr();
         ParticleType* p_ptr = &(aos[0]);
 
-	AMREX_FOR_1D ( num_move, i,
+	AMREX_FOR_1D ( np, i,
         {
-            auto& p = p_ptr[num_stay + i];
-            int grid_id = getParticleGrid(p, mask_arr, plo, dxi, domain);
+            auto& p = p_ptr[i];
 
+            int grid_id;
+            if (i >= num_stay) grid_id = getParticleGrid(p, mask_arr, plo, dxi, domain);
             // apply periodic boundary conditions
             for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
             {
@@ -1810,9 +1811,12 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                 }
             }
 
-            p_boxes[i] = grid_id;
-            p_periodic_shift[i] = IntVect(AMREX_D_DECL(0,0,0)); // already handled this
-            p_src_indices[i] = num_stay+i;
+            if (i >= num_stay) 
+            {
+                p_boxes[i-num_stay] = grid_id;
+                p_periodic_shift[i-num_stay] = IntVect(AMREX_D_DECL(0,0,0));
+                p_src_indices[i-num_stay] = i;
+            }
 	});
     }
     BL_PROFILE_VAR_STOP(blp_partition);
@@ -1857,6 +1861,8 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
         cudaMemcpyAsync(rcv_buffer.dataPtr(), pinned_rcv_buffer.dataPtr(), pinned_rcv_buffer.size()*sizeof(SuperParticleType), cudaMemcpyHostToDevice);    
         unpackRemotes(*this, plan, rcv_buffer, RedistributeUnpackPolicy());
     }
+
+    AMREX_ASSERT(numParticlesOutOfRange(*this, 0) == 0);
 #endif    
 }
 
