@@ -285,7 +285,8 @@ extern "C" {
     void amrex_mlndlap_normalize_sten (const int* lo, const int* hi,
                                        amrex_real* x, const int* xlo, const int* xhi,
                                        const amrex_real* sten, const int* slo, const int* shi,
-                                       const int* dmsk, const int* dmlo, const int* dmhi);
+                                       const int* dmsk, const int* dmlo, const int* dmhi,
+                                       const amrex_real s0_norm0);
 
     void amrex_mlndlap_gauss_seidel_sten (const int* lo, const int* hi,
                                           amrex_real* sol, const int* slo, const int* shi,
@@ -361,6 +362,14 @@ extern "C" {
                                   const amrex_real* vfrac, const int* vlo, const int* vhi,
                                   const amrex_real* intg, const int* glo, const int* ghi,
                                   const amrex_real* dxinv);
+
+    void amrex_mlndlap_rhcc_eb (const int* lo, const int* hi,
+                                amrex_real* rhs, const int* rlo, const int* rhi,
+                                const amrex_real* rhcc, const int* clo, const int* chi,
+                                const amrex_real* vfrac, const int* flo, const int* fhi,
+                                const amrex_real* intg, const int* glo, const int* ghi,
+                                const int* dmsk, const int* mlo, const int* mhi);
+
 #endif // AMREX_USE_EB
 
 

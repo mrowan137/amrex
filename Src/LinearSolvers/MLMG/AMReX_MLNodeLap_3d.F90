@@ -48,7 +48,8 @@ module amrex_mlnodelap_3d_module
   integer, private, parameter :: i_S_x2_y2 = 16
   integer, private, parameter :: i_S_x2_z2 = 17
   integer, private, parameter :: i_S_y2_z2 = 18
-  integer, private, parameter :: n_Sintg = 18
+  integer, private, parameter :: i_S_xyz   = 19
+  integer, private, parameter :: n_Sintg   = 19
 
   integer, private, parameter :: i_c_xmym = 1
   integer, private, parameter :: i_c_xmyb = 2
@@ -118,9 +119,8 @@ module amrex_mlnodelap_3d_module
        amrex_mlndlap_stencil_rap
 
 #ifdef AMREX_USE_EB
-  public:: amrex_mlndlap_set_integral, amrex_mlndlap_set_integral_eb, &
-       amrex_mlndlap_set_connection, amrex_mlndlap_set_stencil_eb, &
-       amrex_mlndlap_divu_eb, amrex_mlndlap_mknewu_eb
+  public:: amrex_mlndlap_set_connection, amrex_mlndlap_set_stencil_eb, &
+       amrex_mlndlap_divu_eb, amrex_mlndlap_mknewu_eb, amrex_mlndlap_rhcc_eb
 #endif
 
 contains
@@ -2857,18 +2857,19 @@ contains
   end subroutine amrex_mlndlap_adotx_sten
 
   subroutine amrex_mlndlap_normalize_sten (lo, hi, x, xlo, xhi, &
-       sten, slo, shi, msk, mlo, mhi) bind(c,name='amrex_mlndlap_normalize_sten')
+       sten, slo, shi, msk, mlo, mhi, s0_norm0) bind(c,name='amrex_mlndlap_normalize_sten')
     integer, dimension(3), intent(in) :: lo, hi, xlo, xhi, slo, shi, mlo, mhi
     real(amrex_real), intent(inout) ::   x(xlo(1):xhi(1),xlo(2):xhi(2),xlo(3):xhi(3))
     real(amrex_real), intent(in   ) ::sten(slo(1):shi(1),slo(2):shi(2),slo(3):shi(3),n_sten)
     integer         , intent(in   ) :: msk(mlo(1):mhi(1),mlo(2):mhi(2),mlo(3):mhi(3))
+    real(amrex_real), intent(in), value :: s0_norm0
 
     integer :: i,j,k
 
     do       k = lo(3), hi(3)
        do    j = lo(2), hi(2)
           do i = lo(1), hi(1)
-             if (msk(i,j,k) .ne. dirichlet .and. sten(i,j,k,ist_000) .ne. 0.d0) then
+             if (msk(i,j,k) .ne. dirichlet .and. abs(sten(i,j,k,ist_000)) .gt. s0_norm0) then
                 x(i,j,k) = x(i,j,k) / sten(i,j,k,ist_000)
              end if
           end do
@@ -6526,57 +6527,6 @@ contains
 
 #ifdef AMREX_USE_EB
 
-  subroutine amrex_mlndlap_set_integral (lo, hi, intg, glo, ghi) &
-       bind(c,name='amrex_mlndlap_set_integral')
-    integer, dimension(3) :: lo, hi, glo, ghi
-    real(amrex_real), intent(inout) :: intg(glo(1):hi(1),lo(2):hi(2),lo(3):hi(3),n_Sintg)
-    integer :: i,j,k
-    real(amrex_real), parameter :: offth = 1.d0/144.d0
-    do       k = lo(3), hi(3)
-       do    j = lo(2), hi(2)
-          do i = lo(1), hi(1)
-             intg(i,j,k,i_S_x    ) = 0.d0
-             intg(i,j,k,i_S_y    ) = 0.d0
-             intg(i,j,k,i_S_z    ) = 0.d0
-             intg(i,j,k,i_S_x2   ) = twelfth
-             intg(i,j,k,i_S_y2   ) = twelfth
-             intg(i,j,k,i_S_z2   ) = twelfth
-             intg(i,j,k,i_S_x_y  ) = 0.d0
-             intg(i,j,k,i_S_x_z  ) = 0.d0
-             intg(i,j,k,i_S_y_z  ) = 0.d0
-             intg(i,j,k,i_S_x2_y ) = 0.d0
-             intg(i,j,k,i_S_x2_z ) = 0.d0
-             intg(i,j,k,i_S_x_y2 ) = 0.d0
-             intg(i,j,k,i_S_y2_z ) = 0.d0
-             intg(i,j,k,i_S_x_z2 ) = 0.d0
-             intg(i,j,k,i_S_y_z2 ) = 0.d0
-             intg(i,j,k,i_S_x2_y2) = offth
-             intg(i,j,k,i_S_x2_z2) = offth
-             intg(i,j,k,i_S_y2_z2) = offth
-          end do
-       end do
-    end do
-  end subroutine amrex_mlndlap_set_integral
-
-  subroutine amrex_mlndlap_set_integral_eb (lo, hi, intg, glo, ghi, flag, flo, fhi, &
-       vol, vlo, vhi, ax, axlo, axhi, ay, aylo, ayhi, az, azlo, azhi, bcen, blo, bhi) &
-       bind(c,name='amrex_mlndlap_set_integral_eb')
-    use amrex_ebcellflag_module, only : is_single_valued_cell, is_regular_cell, is_covered_cell
-    integer, dimension(3) :: lo, hi, glo, ghi, flo, fhi, vlo, vhi, axlo, axhi, aylo, ayhi, &
-         azlo, azhi, blo, bhi
-    real(amrex_real), intent(inout) :: intg( glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3),n_Sintg)
-    real(amrex_real), intent(in   ) :: vol ( vlo(1): vhi(1), vlo(2): vhi(2), vlo(3): vhi(3))
-    real(amrex_real), intent(in   ) :: ax  (axlo(1):axhi(1),axlo(2):axhi(2),axlo(3):axhi(3))
-    real(amrex_real), intent(in   ) :: ay  (aylo(1):ayhi(1),aylo(2):ayhi(2),aylo(3):ayhi(3))
-    real(amrex_real), intent(in   ) :: az  (azlo(1):azhi(1),azlo(2):azhi(2),azlo(3):azhi(3))
-    real(amrex_real), intent(in   ) :: bcen( blo(1): bhi(1), blo(2): bhi(2), blo(3): bhi(3),3)
-    integer         , intent(in   ) :: flag( flo(1): fhi(1), flo(2): fhi(2), flo(3): fhi(3))
-
-    call amrex_mlndlap_set_integral(lo, hi, intg, glo, ghi)
-
-  end subroutine amrex_mlndlap_set_integral_eb
-
-
   subroutine amrex_mlndlap_set_connection (lo, hi, conn, clo, chi, intg, glo, ghi, flag, flo, fhi, &
        vol, vlo, vhi) bind(c,name='amrex_mlndlap_set_connection')
     use amrex_ebcellflag_module, only : is_single_valued_cell, is_regular_cell, is_covered_cell
@@ -7014,6 +6964,110 @@ contains
     end do
 
   end subroutine amrex_mlndlap_mknewu_eb
+
+  subroutine amrex_mlndlap_rhcc_eb (lo, hi, rhs, rlo, rhi, rhcc, clo, chi, &
+       vfrac, flo, fhi, intg, glo, ghi, msk, mlo, mhi) &
+       bind(c,name='amrex_mlndlap_rhcc_eb')
+    integer, dimension(3) :: lo, hi, rlo, rhi, clo, chi, flo, fhi, glo, ghi, mlo, mhi
+    real(amrex_real), intent(inout) :: rhs (rlo(1):rhi(1),rlo(2):rhi(2),rlo(3):rhi(3))
+    real(amrex_real), intent(in   ) :: rhcc(clo(1):chi(1),clo(2):chi(2),clo(3):chi(3))
+    real(amrex_real), intent(in   ) :: vfrac(flo(1):fhi(1),flo(2):fhi(2),flo(3):fhi(3))
+    real(amrex_real), intent(in   ) :: intg(glo(1):ghi(1),glo(2):ghi(2),glo(3):ghi(3),n_Sintg)
+    integer,          intent(in   ) :: msk (mlo(1):mhi(1),mlo(2):mhi(2),mlo(3):mhi(3))
+
+    integer :: i,j,k
+
+    do       k = lo(3), hi(3)
+       do    j = lo(2), hi(2)
+          do i = lo(1), hi(1)
+             if (msk(i,j,k) .ne. dirichlet) then
+                rhs(i,j,k) = &
+                     &            rhcc(i  ,j  ,k  ) * &
+                     ( 0.125d0 * vfrac(i  ,j  ,k  ) &
+                     + 0.25d0 * (-intg(i  ,j  ,k  ,i_S_x) &
+                     &           -intg(i  ,j  ,k  ,i_S_y) &
+                     &           -intg(i  ,j  ,k  ,i_S_z)) &
+                     + 0.5d0 * (  intg(i  ,j  ,k  ,i_S_x_y) &
+                     &           +intg(i  ,j  ,k  ,i_S_x_z) &
+                     &           +intg(i  ,j  ,k  ,i_S_y_z)) &
+                     +         ( -intg(i  ,j  ,k  ,i_S_xyz))) &
+                     !
+                     +            rhcc(i-1,j  ,k  ) * &
+                     ( 0.125d0 * vfrac(i-1,j  ,k  ) &
+                     + 0.25d0 * ( intg(i-1,j  ,k  ,i_S_x) &
+                     &           -intg(i-1,j  ,k  ,i_S_y) &
+                     &           -intg(i-1,j  ,k  ,i_S_z)) &
+                     + 0.5d0 * ( -intg(i-1,j  ,k  ,i_S_x_y) &
+                     &           -intg(i-1,j  ,k  ,i_S_x_z) &
+                     &           +intg(i-1,j  ,k  ,i_S_y_z)) &
+                     +         (  intg(i-1,j  ,k  ,i_S_xyz))) &
+                     !
+                     +            rhcc(i  ,j-1,k  ) * &
+                     ( 0.125d0 * vfrac(i  ,j-1,k  ) &
+                     + 0.25d0 * (-intg(i  ,j-1,k  ,i_S_x) &
+                     &           +intg(i  ,j-1,k  ,i_S_y) &
+                     &           -intg(i  ,j-1,k  ,i_S_z)) &
+                     + 0.5d0 * ( -intg(i  ,j-1,k  ,i_S_x_y) &
+                     &           +intg(i  ,j-1,k  ,i_S_x_z) &
+                     &           -intg(i  ,j-1,k  ,i_S_y_z)) &
+                     +         (  intg(i  ,j-1,k  ,i_S_xyz))) &
+                     !
+                     +            rhcc(i-1,j-1,k  ) * &
+                     ( 0.125d0 * vfrac(i-1,j-1,k  ) &
+                     + 0.25d0 * ( intg(i-1,j-1,k  ,i_S_x) &
+                     &           +intg(i-1,j-1,k  ,i_S_y) &
+                     &           -intg(i-1,j-1,k  ,i_S_z)) &
+                     + 0.5d0 * (  intg(i-1,j-1,k  ,i_S_x_y) &
+                     &           -intg(i-1,j-1,k  ,i_S_x_z) &
+                     &           -intg(i-1,j-1,k  ,i_S_y_z)) &
+                     +         ( -intg(i-1,j-1,k  ,i_S_xyz))) &
+                     !
+                     +            rhcc(i  ,j  ,k-1) * &
+                     ( 0.125d0 * vfrac(i  ,j  ,k-1) &
+                     + 0.25d0 * (-intg(i  ,j  ,k-1,i_S_x) &
+                     &           -intg(i  ,j  ,k-1,i_S_y) &
+                     &           +intg(i  ,j  ,k-1,i_S_z)) &
+                     + 0.5d0 * (  intg(i  ,j  ,k-1,i_S_x_y) &
+                     &           -intg(i  ,j  ,k-1,i_S_x_z) &
+                     &           -intg(i  ,j  ,k-1,i_S_y_z)) &
+                     +         (  intg(i  ,j  ,k-1,i_S_xyz))) &
+                     !
+                     +            rhcc(i-1,j  ,k-1) * &
+                     ( 0.125d0 * vfrac(i-1,j  ,k-1) &
+                     + 0.25d0 * ( intg(i-1,j  ,k-1,i_S_x) &
+                     &           -intg(i-1,j  ,k-1,i_S_y) &
+                     &           +intg(i-1,j  ,k-1,i_S_z)) &
+                     + 0.5d0 * ( -intg(i-1,j  ,k-1,i_S_x_y) &
+                     &           +intg(i-1,j  ,k-1,i_S_x_z) &
+                     &           -intg(i-1,j  ,k-1,i_S_y_z)) &
+                     +         ( -intg(i-1,j  ,k-1,i_S_xyz))) &
+                     !
+                     +            rhcc(i  ,j-1,k-1) * &
+                     ( 0.125d0 * vfrac(i  ,j-1,k-1) &
+                     + 0.25d0 * (-intg(i  ,j-1,k-1,i_S_x) &
+                     &           +intg(i  ,j-1,k-1,i_S_y) &
+                     &           +intg(i  ,j-1,k-1,i_S_z)) &
+                     + 0.5d0 * ( -intg(i  ,j-1,k-1,i_S_x_y) &
+                     &           -intg(i  ,j-1,k-1,i_S_x_z) &
+                     &           +intg(i  ,j-1,k-1,i_S_y_z)) &
+                     +         ( -intg(i  ,j-1,k-1,i_S_xyz))) &
+                     !
+                     +            rhcc(i-1,j-1,k-1) * &
+                     ( 0.125d0 * vfrac(i-1,j-1,k-1) &
+                     + 0.25d0 * ( intg(i-1,j-1,k-1,i_S_x) &
+                     &           +intg(i-1,j-1,k-1,i_S_y) &
+                     &           +intg(i-1,j-1,k-1,i_S_z)) &
+                     + 0.5d0 * (  intg(i-1,j-1,k-1,i_S_x_y) &
+                     &           +intg(i-1,j-1,k-1,i_S_x_z) &
+                     &           +intg(i-1,j-1,k-1,i_S_y_z)) &
+                     +         (  intg(i-1,j-1,k-1,i_S_xyz)))
+             else
+                rhs(i,j,k) = 0.d0
+             end if
+          end do
+       end do
+    end do
+  end subroutine amrex_mlndlap_rhcc_eb
 
 #endif
 

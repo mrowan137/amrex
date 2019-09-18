@@ -11,6 +11,7 @@ namespace amrex {
 MacProjector::MacProjector (const Vector<Array<MultiFab*,AMREX_SPACEDIM> >& a_umac,
                             const Vector<Array<MultiFab const*,AMREX_SPACEDIM> >& a_beta,
                             const Vector<Geometry>& a_geom,
+                            const LPInfo& a_lpinfo,
                             const Vector<MultiFab const*>& a_divu)
     : m_umac(a_umac),
       m_geom(a_geom)
@@ -47,7 +48,7 @@ MacProjector::MacProjector (const Vector<Array<MultiFab*,AMREX_SPACEDIM> >& a_um
             }
         }
 
-        m_eb_abeclap.reset(new MLEBABecLap(a_geom, ba, dm, LPInfo(), m_eb_factory));
+        m_eb_abeclap.reset(new MLEBABecLap(a_geom, ba, dm, a_lpinfo, m_eb_factory));
         m_linop = m_eb_abeclap.get();
 
         m_eb_abeclap->setScalars(0.0, 1.0);
@@ -69,7 +70,7 @@ MacProjector::MacProjector (const Vector<Array<MultiFab*,AMREX_SPACEDIM> >& a_um
             }
         }
 
-        m_abeclap.reset(new MLABecLaplacian(a_geom, ba, dm));
+        m_abeclap.reset(new MLABecLaplacian(a_geom, ba, dm, a_lpinfo));
         m_linop = m_abeclap.get();
 
         m_abeclap->setScalars(0.0, 1.0);
@@ -103,6 +104,10 @@ MacProjector::project (Real reltol, Real atol )
         m_mlmg.reset(new MLMG(*m_linop));
         m_mlmg->setVerbose(m_verbose);
         m_mlmg->setCGVerbose(m_cg_verbose);
+        m_mlmg->setMaxIter(m_maxiter);
+        m_mlmg->setCGMaxIter(m_cg_maxiter);
+        m_mlmg->setBottomTolerance   (m_bottom_reltol);
+        m_mlmg->setBottomToleranceAbs(m_bottom_abstol);
     }
 
     m_mlmg->setBottomSolver(bottom_solver_type);
@@ -149,7 +154,9 @@ MacProjector::project (const Vector<MultiFab*>& phi_inout, Real reltol, Real ato
     {
         m_mlmg.reset(new MLMG(*m_linop));
         m_mlmg->setVerbose(m_verbose);
-        m_mlmg->setVerbose(m_cg_verbose);
+        m_mlmg->setCGVerbose(m_cg_verbose);
+        m_mlmg->setMaxIter(m_maxiter);
+        m_mlmg->setCGMaxIter(m_cg_maxiter);
     }
 
     m_mlmg->setBottomSolver(bottom_solver_type);

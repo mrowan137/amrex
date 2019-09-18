@@ -205,12 +205,14 @@ void MLMG::oneIter (int iter)
     BL_PROFILE("MLMG::oneIter()");
 
     int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     for (int alev = finest_amr_lev; alev > 0; --alev)
     {
         miniCycle(alev);
 
-        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, 0);
+        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, nghost);
 
         // compute residual for the coarse AMR level
         computeResWithCrseSolFineCor(alev-1,alev);
@@ -242,10 +244,10 @@ void MLMG::oneIter (int iter)
         // (Fine AMR correction) = I(Coarse AMR correction)
         interpCorrection(alev);
 
-        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, 0);
+        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, nghost);
 
         if (alev != finest_amr_lev) {
-	  MultiFab::Add(*cor_hold[alev][0], *cor[alev][0], 0, 0, ncomp, 0);
+	  MultiFab::Add(*cor_hold[alev][0], *cor[alev][0], 0, 0, ncomp, nghost);
         }
 
         // Update fine AMR level correction
@@ -253,10 +255,10 @@ void MLMG::oneIter (int iter)
 
         miniCycle(alev);
 
-        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, 0);
+        MultiFab::Add(*sol[alev], *cor[alev][0], 0, 0, ncomp, nghost);
 
         if (alev != finest_amr_lev) {
-	  MultiFab::Add(*cor[alev][0], *cor_hold[alev][0], 0, 0, ncomp, 0);
+	  MultiFab::Add(*cor[alev][0], *cor_hold[alev][0], 0, 0, ncomp, nghost);
         }
     }
 
@@ -304,6 +306,8 @@ MLMG::computeResWithCrseSolFineCor (int calev, int falev)
     BL_PROFILE("MLMG::computeResWithCrseSolFineCor()");
 
     int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     MultiFab& crse_sol = *sol[calev];
     const MultiFab& crse_rhs = rhs[calev];
@@ -322,7 +326,7 @@ MLMG::computeResWithCrseSolFineCor (int calev, int falev)
     linop.solutionResidual(calev, crse_res, crse_sol, crse_rhs, crse_bcdata);
 
     linop.correctionResidual(falev, 0, fine_rescor, fine_cor, fine_res, BCMode::Homogeneous);
-    MultiFab::Copy(fine_res, fine_rescor, 0, 0, ncomp, 0);
+    MultiFab::Copy(fine_res, fine_rescor, 0, 0, ncomp, nghost);
 
     linop.reflux(calev, crse_res, crse_sol, crse_rhs, fine_res, fine_sol, fine_rhs);
 
@@ -343,6 +347,8 @@ MLMG::computeResWithCrseCorFineCor (int falev)
     BL_PROFILE("MLMG::computeResWithCrseCorFineCor()");
 
     int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     const MultiFab& crse_cor = *cor[falev-1][0];
 
@@ -353,7 +359,7 @@ MLMG::computeResWithCrseCorFineCor (int falev)
     // fine_rescor = fine_res - L(fine_cor)
     linop.correctionResidual(falev, 0, fine_rescor, fine_cor, fine_res,
                              BCMode::Inhomogeneous, &crse_cor);
-    MultiFab::Copy(fine_res, fine_rescor, 0, 0, ncomp, 0);
+    MultiFab::Copy(fine_res, fine_rescor, 0, 0, ncomp, nghost);
 }
 
 void
@@ -462,7 +468,7 @@ MLMG::mgVcycle (int amrlev, int mglev_top)
         }
         if (verbose >= 4)
         {
-            computeResOfCorrection(amrlev, mglev_bottom);
+	    computeResOfCorrection(amrlev, mglev_bottom);
             Real norm = rescor[amrlev][mglev_bottom].norm0();
             amrex::Print() << "AT LEVEL "  << amrlev  << " " << mglev_bottom 
                            << "       Norm after  smooth " << norm << "\n";
@@ -478,7 +484,7 @@ MLMG::mgVcycle (int amrlev, int mglev_top)
         addInterpCorrection(amrlev, mglev);
         if (verbose >= 4)
         {
-            computeResOfCorrection(amrlev, mglev);
+	    computeResOfCorrection(amrlev, mglev);
             Real norm = rescor[amrlev][mglev].norm0();
             amrex::Print() << "AT LEVEL "  << amrlev << " " << mglev
                            << "   UP: Norm before smooth " << norm << "\n";
@@ -486,9 +492,12 @@ MLMG::mgVcycle (int amrlev, int mglev_top)
         for (int i = 0; i < nu2; ++i) {
             linop.smooth(amrlev, mglev, *cor[amrlev][mglev], res[amrlev][mglev]);
         }
+
+	if (cf_strategy == CFStrategy::ghostnodes) computeResOfCorrection(amrlev, mglev);
+
         if (verbose >= 4)
         {
-            computeResOfCorrection(amrlev, mglev);
+	    computeResOfCorrection(amrlev, mglev);
             Real norm = rescor[amrlev][mglev].norm0();
             amrex::Print() << "AT LEVEL "  << amrlev << " " << mglev
                            << "   UP: Norm after  smooth " << norm << "\n";
@@ -508,6 +517,8 @@ MLMG::mgFcycle ()
     const int ratio = 2;
     const int mg_bottom_lev = linop.NMGLevels(amrlev) - 1;
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     for (int mglev = 1; mglev <= mg_bottom_lev; ++mglev)
     {
@@ -525,12 +536,12 @@ MLMG::mgFcycle ()
         // rescor = res - L(cor)
         computeResOfCorrection(amrlev, mglev);
         // res = rescor; this provides b to the vcycle below
-        MultiFab::Copy(res[amrlev][mglev], rescor[amrlev][mglev], 0,0,ncomp,0);
+        MultiFab::Copy(res[amrlev][mglev], rescor[amrlev][mglev], 0,0,ncomp,nghost);
 
         // save cor; do v-cycle; add the saved to cor
         std::swap(cor[amrlev][mglev], cor_hold[amrlev][mglev]);
         mgVcycle(amrlev, mglev);
-        MultiFab::Add(*cor[amrlev][mglev], *cor_hold[amrlev][mglev], 0, 0, ncomp, 0);
+        MultiFab::Add(*cor[amrlev][mglev], *cor_hold[amrlev][mglev], 0, 0, ncomp, nghost);
     }
 }
 
@@ -542,6 +553,8 @@ MLMG::interpCorrection (int alev)
     BL_PROFILE("MLMG::interpCorrection_1");
 
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     const MultiFab& crse_cor = *cor[alev-1][0];
     MultiFab& fine_cor = *cor[alev][0];
@@ -553,10 +566,16 @@ MLMG::interpCorrection (int alev)
 
     const Geometry& crse_geom = linop.Geom(alev-1,0);
 
-    const int ng = linop.isCellCentered() ? 1 : 0;
-    MultiFab cfine(ba, fine_cor.DistributionMap(), ncomp, ng);
+    int ng_src = 0;
+    int ng_dst = linop.isCellCentered() ? 1 : 0;
+    if (cf_strategy == CFStrategy::ghostnodes) 
+    {
+        ng_src = nghost;
+        ng_dst = nghost;
+    }
+    MultiFab cfine(ba, fine_cor.DistributionMap(), ncomp, ng_dst);
     cfine.setVal(0.0);
-    cfine.ParallelCopy(crse_cor, 0, 0, ncomp, 0, ng, crse_geom.periodicity());
+    cfine.ParallelCopy(crse_cor, 0, 0, ncomp, ng_src, ng_dst, crse_geom.periodicity());
 
     bool isEB = fine_cor.hasEBFabFactory();
     ignore_unused(isEB);
@@ -568,7 +587,7 @@ MLMG::interpCorrection (int alev)
 
     if (linop.isCellCentered())
     {
-        Gpu::LaunchSafeGuard lg(!isEB); // turn off gpu for eb for now TODO
+        Gpu::LaunchSafeGuard lg(!isEB && Gpu::inLaunchRegion()); // turn off gpu for eb for now TODO
         MFItInfo mfi_info;
         if (Gpu::notInLaunchRegion()) mfi_info.EnableTiling().SetDynamic(true);
 #ifdef _OPENMP
@@ -640,14 +659,29 @@ MLMG::interpCorrection (int alev)
             {
                 const Box& fbx = mfi.tilebox();
                 const Box& cbx = amrex::coarsen(fbx,2);
-                const Box& tmpbx = amrex::refine(cbx,2);
-                tmpfab.resize(tmpbx,ncomp);
-                amrex_mlmg_lin_nd_interp(BL_TO_FORTRAN_BOX(cbx),
-                                         BL_TO_FORTRAN_BOX(tmpbx),
-                                         BL_TO_FORTRAN_ANYD(tmpfab),
-                                         BL_TO_FORTRAN_ANYD(cfine[mfi]),
-					 &ncomp);
-                fine_cor[mfi].copy(tmpfab, fbx, 0, fbx, 0, ncomp);
+		if (cf_strategy == CFStrategy::none)
+		{
+                    const Box& tmpbx = amrex::refine(cbx,2);
+                    tmpfab.resize(tmpbx,ncomp);
+                    amrex_mlmg_lin_nd_interp(BL_TO_FORTRAN_BOX(cbx),
+                                             BL_TO_FORTRAN_BOX(tmpbx),
+                                             BL_TO_FORTRAN_ANYD(tmpfab),
+                                             BL_TO_FORTRAN_ANYD(cfine[mfi]),
+					     &ncomp);
+                    fine_cor[mfi].copy(tmpfab, fbx, 0, fbx, 0, ncomp);
+                }
+                else if (cf_strategy == CFStrategy::ghostnodes)
+                {
+                    Box tmpbx = amrex::refine(cbx,2);
+		    if (nghost > 1) tmpbx.grow(2);
+                    tmpfab.resize(tmpbx,ncomp);
+                    amrex_mlmg_lin_nd_interp_ghostnodes(BL_TO_FORTRAN_BOX(cbx),
+                                                        BL_TO_FORTRAN_BOX(tmpbx),
+                                                        BL_TO_FORTRAN_ANYD(tmpfab),
+                                                        BL_TO_FORTRAN_ANYD(cfine[mfi]),
+			                                &ncomp);
+                    fine_cor[mfi].copy(tmpfab, tmpbx, 0, tmpbx, 0, ncomp);
+                }
             }
         }
     }
@@ -666,6 +700,8 @@ MLMG::interpCorrection (int alev, int mglev)
     MultiFab& fine_cor = *cor[alev][mglev  ];
 
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     const Geometry& crse_geom = linop.Geom(alev,mglev+1);
     const int refratio = 2;
@@ -682,7 +718,8 @@ MLMG::interpCorrection (int alev, int mglev)
     {
         BoxArray cba = fine_cor.boxArray();
         cba.coarsen(refratio);
-        const int ng = linop.isCellCentered() ? crse_cor.nGrow() : 0;
+        int ng = linop.isCellCentered() ? crse_cor.nGrow() : 0;
+        if (cf_strategy == CFStrategy::ghostnodes) ng = nghost;
         cfine.define(cba, fine_cor.DistributionMap(), ncomp, ng);
         cfine.setVal(0.0);
         cfine.ParallelCopy(crse_cor, 0, 0, ncomp, 0, ng, crse_geom.periodicity());
@@ -699,7 +736,7 @@ MLMG::interpCorrection (int alev, int mglev)
 
     if (linop.isCellCentered())
     {
-        Gpu::LaunchSafeGuard lg(!isEB); // turn off gpu for eb for now TODO
+        Gpu::LaunchSafeGuard lg(!isEB && Gpu::inLaunchRegion()); // turn off gpu for eb for now TODO
         MFItInfo mfi_info;
         if (Gpu::notInLaunchRegion()) mfi_info.EnableTiling().SetDynamic(true);
 #ifdef _OPENMP
@@ -755,11 +792,22 @@ MLMG::interpCorrection (int alev, int mglev)
                 const Box& cbx = amrex::coarsen(fbx,2);
                 const Box& tmpbx = amrex::refine(cbx,2);
                 tmpfab.resize(tmpbx,ncomp);
-                amrex_mlmg_lin_nd_interp(BL_TO_FORTRAN_BOX(cbx),
-                                         BL_TO_FORTRAN_BOX(tmpbx),
-                                         BL_TO_FORTRAN_ANYD(tmpfab),
-                                         BL_TO_FORTRAN_ANYD((*cmf)[mfi]),
-					 &ncomp);
+		if (cf_strategy == CFStrategy::none)
+		{
+			amrex_mlmg_lin_nd_interp(BL_TO_FORTRAN_BOX(cbx),
+						 BL_TO_FORTRAN_BOX(tmpbx),
+						 BL_TO_FORTRAN_ANYD(tmpfab),
+						 BL_TO_FORTRAN_ANYD((*cmf)[mfi]),
+						 &ncomp);
+		}
+		else if (cf_strategy == CFStrategy::ghostnodes)
+		{
+			amrex_mlmg_lin_nd_interp_ghostnodes(BL_TO_FORTRAN_BOX(cbx),
+							    BL_TO_FORTRAN_BOX(tmpbx),
+							    BL_TO_FORTRAN_ANYD(tmpfab),
+							    BL_TO_FORTRAN_ANYD((*cmf)[mfi]),
+							    &ncomp);
+		}
                 fine_cor[mfi].copy(tmpfab, fbx, 0, fbx, 0, ncomp);
             }
         }
@@ -945,10 +993,9 @@ MLMG::bottomSolveWithCG (MultiFab& x, const MultiFab& b, MLCGSolver::Type type)
     cg_solver.setSolver(type);
     cg_solver.setVerbose(bottom_verbose);
     cg_solver.setMaxIter(bottom_maxiter);
+    if (cf_strategy == CFStrategy::ghostnodes) cg_solver.setNGhost(linop.getNGrow());
 
-    const Real cg_rtol = bottom_reltol;
-    const Real cg_atol = -1.0;
-    int ret = cg_solver.solve(x, b, cg_rtol, cg_atol);
+    int ret = cg_solver.solve(x, b, bottom_reltol, bottom_abstol);
     if (ret != 0 && verbose > 1) {
         amrex::Print() << "MLMG: Bottom solve failed.\n";
     }
@@ -983,7 +1030,7 @@ MLMG::ResNormInf (int alev, bool local)
 	} else {
             newnorm = pmf->norm0(n,0,true);
 	}
-	if (newnorm > norm) norm = newnorm;
+        norm = std::max(norm, newnorm);
     }
     if (!local) ParallelAllReduce::Max(norm, ParallelContext::CommunicatorSub());
     return norm;
@@ -1044,15 +1091,13 @@ MLMG::buildFineMask ()
 
     if (!fine_mask.empty()) return;
 
-    const int ncomp = linop.getNComp();
-
     fine_mask.clear();
     fine_mask.resize(namrlevs);
     
     const auto& amrrr = linop.AMRRefRatio();
     for (int alev = 0; alev < finest_amr_lev; ++alev)
     {
-        fine_mask[alev].reset(new iMultiFab(rhs[alev].boxArray(), rhs[alev].DistributionMap(), ncomp, 0));
+        fine_mask[alev].reset(new iMultiFab(rhs[alev].boxArray(), rhs[alev].DistributionMap(), 1, 0));
         fine_mask[alev]->setVal(1);
 
         BoxArray baf = rhs[alev+1].boxArray();
@@ -1092,6 +1137,8 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
     timer.assign(ntimers, 0.0);
 
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     if (!linop_prepared) {
         linop.prepareForSolve();
@@ -1115,9 +1162,14 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
     sol_raii.resize(namrlevs);
     for (int alev = 0; alev < namrlevs; ++alev)
     {
-        if (a_sol[alev]->nGrow() == 1)
+        if (cf_strategy == CFStrategy::ghostnodes)
         {
             sol[alev] = a_sol[alev];
+        }
+        else if (a_sol[alev]->nGrow() == 1)
+        {
+            sol[alev] = a_sol[alev];
+            sol[alev]->setBndry(0.0);
         }
         else
         {
@@ -1136,11 +1188,12 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
     for (int alev = 0; alev < namrlevs; ++alev)
     {
         if (!solve_called) {
-            rhs[alev].define(a_rhs[alev]->boxArray(), a_rhs[alev]->DistributionMap(), ncomp, 0,
+            rhs[alev].define(a_rhs[alev]->boxArray(), a_rhs[alev]->DistributionMap(), ncomp, nghost,
                              MFInfo(), *linop.Factory(alev));
         }
-        MultiFab::Copy(rhs[alev], *a_rhs[alev], 0, 0, ncomp, 0);
+        MultiFab::Copy(rhs[alev], *a_rhs[alev], 0, 0, ncomp, nghost);
         linop.applyMetricTerm(alev, 0, rhs[alev]);
+        linop.applyInhomogNeumannTerm(alev, rhs[alev]);
 
 #ifdef AMREX_USE_EB
         auto factory = dynamic_cast<EBFArrayBoxFactory const*>(linop.Factory(alev));
@@ -1165,6 +1218,7 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
     }
 
     int ng = linop.isCellCentered() ? 0 : 1;
+    if (cf_strategy == CFStrategy::ghostnodes) ng = nghost;
     if (!solve_called) {
         linop.make(res, ncomp, ng);
         linop.make(rescor, ncomp, ng);
@@ -1179,7 +1233,7 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
         }
     }
 
-    ng = 1;
+    if (cf_strategy == CFStrategy::none) ng = 1;
     cor.resize(namrlevs);
     for (int alev = 0; alev <= finest_amr_lev; ++alev)
     {
@@ -1267,15 +1321,21 @@ MLMG::prepareForSolve (const Vector<MultiFab*>& a_sol, const Vector<MultiFab con
 void
 MLMG::prepareForNSolve ()
 {
-    ns_linop = std::move(linop.makeNLinOp(nsolve_grid_size));
+    ns_linop = linop.makeNLinOp(nsolve_grid_size);
 
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     const BoxArray& ba = (*ns_linop).m_grids[0][0];
     const DistributionMapping& dm =(*ns_linop).m_dmap[0][0]; 
 
-    ns_sol.reset(new MultiFab(ba, dm, ncomp, 1, MFInfo(), *(ns_linop->Factory(0,0))));
-    ns_rhs.reset(new MultiFab(ba, dm, ncomp, 0, MFInfo(), *(ns_linop->Factory(0,0))));
+    int ng = 1;
+    if (cf_strategy == CFStrategy::ghostnodes) ng = nghost;
+    ns_sol.reset(new MultiFab(ba, dm, ncomp, ng, MFInfo(), *(ns_linop->Factory(0,0))));
+    ng = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) ng = nghost;
+    ns_rhs.reset(new MultiFab(ba, dm, ncomp, ng, MFInfo(), *(ns_linop->Factory(0,0))));
     ns_sol->setVal(0.0);
     ns_rhs->setVal(0.0);
 
@@ -1341,9 +1401,11 @@ MLMG::getFluxes (const Vector<MultiFab*> & a_flux, const Vector<MultiFab*>& a_so
             for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
                 const int mglev = 0;
                 const int ncomp = linop.getNComp();
+                int nghost = 0;
+                if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
                 ffluxes[alev][idim].define(amrex::convert(linop.m_grids[alev][mglev],
                                                           IntVect::TheDimensionVector(idim)),
-                                           linop.m_dmap[alev][mglev], ncomp, 0, MFInfo(),
+                                           linop.m_dmap[alev][mglev], ncomp, nghost, MFInfo(),
                                            *linop.m_factory[alev][mglev]);
             }
         }
@@ -1368,12 +1430,18 @@ MLMG::compResidual (const Vector<MultiFab*>& a_res, const Vector<MultiFab*>& a_s
     BL_PROFILE("MLMG::compResidual()");
 
     const int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
    
     sol.resize(namrlevs);
     sol_raii.resize(namrlevs);
     for (int alev = 0; alev < namrlevs; ++alev)
     {
-        if (a_sol[alev]->nGrow() == 1)
+        if (cf_strategy == CFStrategy::ghostnodes)
+        {
+            sol[alev] = a_sol[alev];
+        }
+        else if (a_sol[alev]->nGrow() == 1)
         {
             sol[alev] = a_sol[alev];
         }
@@ -1403,10 +1471,11 @@ MLMG::compResidual (const Vector<MultiFab*>& a_res, const Vector<MultiFab*>& a_s
         const MultiFab* crse_bcdata = (alev > 0) ? sol[alev-1] : nullptr;
         const MultiFab* prhs = a_rhs[alev];
 #if (AMREX_SPACEDIM != 3)
-        MultiFab rhstmp(prhs->boxArray(), prhs->DistributionMap(), ncomp, 0,
+        MultiFab rhstmp(prhs->boxArray(), prhs->DistributionMap(), ncomp, nghost,
                         MFInfo(), *linop.Factory(alev));
-        MultiFab::Copy(rhstmp, *prhs, 0, 0, ncomp, 0);
+        MultiFab::Copy(rhstmp, *prhs, 0, 0, ncomp, nghost);
         linop.applyMetricTerm(alev, 0, rhstmp);
+        linop.applyInhomogNeumannTerm(alev, rhstmp);
         prhs = &rhstmp;
 #endif
         linop.solutionResidual(alev, *a_res[alev], *sol[alev], *prhs, crse_bcdata);
@@ -1439,25 +1508,33 @@ MLMG::apply (const Vector<MultiFab*>& out, const Vector<MultiFab*>& a_in)
     Vector<MultiFab*> in(namrlevs);
     Vector<MultiFab> in_raii(namrlevs);
     Vector<MultiFab> rh(namrlevs);
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     for (int alev = 0; alev < namrlevs; ++alev)
     {
-        if (a_in[alev]->nGrow() == 1)
+        if (cf_strategy == CFStrategy::ghostnodes)
+        {
+            in[alev] = a_in[alev];
+        }
+        else if (a_in[alev]->nGrow() == 1)
         {
             in[alev] = a_in[alev];
         }
         else
         {
+            int ng = 1;
+            if (cf_strategy == CFStrategy::ghostnodes) ng = nghost;
             in_raii[alev].define(a_in[alev]->boxArray(),
                                  a_in[alev]->DistributionMap(),
-                                 a_in[alev]->nComp(), 1,
+                                 a_in[alev]->nComp(), ng,
                                  MFInfo(), *linop.Factory(alev));
-            MultiFab::Copy(in_raii[alev], *a_in[alev], 0, 0, a_in[alev]->nComp(), 0);
+            MultiFab::Copy(in_raii[alev], *a_in[alev], 0, 0, a_in[alev]->nComp(), nghost);
             in[alev] = &(in_raii[alev]);
         }
         rh[alev].define(a_in[alev]->boxArray(),
                         a_in[alev]->DistributionMap(),
-                        a_in[alev]->nComp(), 0, MFInfo(),
+                        a_in[alev]->nComp(), nghost, MFInfo(),
                         *linop.Factory(alev));
         rh[alev].setVal(0.0);
     }
@@ -1494,7 +1571,7 @@ MLMG::apply (const Vector<MultiFab*>& out, const Vector<MultiFab*>& a_in)
 #endif
 
     for (int alev = 0; alev <= finest_amr_lev; ++alev) {
-        out[alev]->negate();
+        out[alev]->negate(nghost);
     }
 }
 
@@ -1504,6 +1581,8 @@ MLMG::averageDownAndSync ()
     const auto& amrrr = linop.AMRRefRatio();
 
     int ncomp = linop.getNComp();
+    int nghost = 0;
+    if (cf_strategy == CFStrategy::ghostnodes) nghost = linop.getNGrow();
 
     if (linop.isCellCentered())
     {
@@ -1525,8 +1604,7 @@ MLMG::averageDownAndSync ()
             const auto& fmf = *sol[falev];
             auto&       cmf = *sol[falev-1];
 
-            MultiFab tmpmf(amrex::coarsen(fmf.boxArray(), amrrr[falev-1]),
-                           fmf.DistributionMap(), ncomp, 0);
+            MultiFab tmpmf(amrex::coarsen(fmf.boxArray(), amrrr[falev-1]), fmf.DistributionMap(), ncomp, nghost);
             amrex::average_down(fmf, tmpmf, 0, ncomp, amrrr[falev-1]);
             cmf.ParallelCopy(tmpmf, 0, 0, ncomp);
             linop.nodalSync(falev-1, 0, cmf);

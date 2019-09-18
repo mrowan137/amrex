@@ -7,12 +7,7 @@
 
 #ifdef AMREX_USE_EB
 #include <AMReX_EBMultiFabUtil.H>
-#endif
-
-#ifdef AMREX_USE_EB
-#ifdef AMREX_USE_ALGOIM
-#include <AMReX_algoim_integrals.H>
-#endif
+#include <AMReX_algoim.H>
 #endif
 
 #ifdef _OPENMP
@@ -52,7 +47,7 @@ void
 MLNodeLaplacian::define (const Vector<Geometry>& a_geom,
                          const Vector<BoxArray>& a_grids,
                          const Vector<DistributionMapping>& a_dmap,
-                         const LPInfo& info,
+                         const LPInfo& a_info,
                          const Vector<FabFactory<FArrayBox> const*>& a_factory)
 {
     BL_PROFILE("MLNodeLaplacian::define()");
@@ -63,7 +58,7 @@ MLNodeLaplacian::define (const Vector<Geometry>& a_geom,
         ba.enclosedCells();
     }
 
-    MLNodeLinOp::define(a_geom, cc_grids, a_dmap, info, a_factory);
+    MLNodeLinOp::define(a_geom, cc_grids, a_dmap, a_info, a_factory);
 
     m_sigma.resize(m_num_amr_levels);
     for (int amrlev = 0; amrlev < m_num_amr_levels; ++amrlev)
@@ -78,9 +73,9 @@ MLNodeLaplacian::define (const Vector<Geometry>& a_geom,
 
 #ifdef AMREX_USE_EB
 #if (AMREX_SPACEDIM == 2)
-    const int ncomp_i = 4;
+    const int ncomp_i = 5;
 #else
-    const int ncomp_i = 18;
+    const int ncomp_i = algoim::numIntgs;
 #endif
     m_integral.resize(m_num_amr_levels);
     for (int amrlev = 0; amrlev < m_num_amr_levels; ++amrlev)
@@ -97,7 +92,7 @@ MLNodeLaplacian::define (const Vector<Geometry>& a_geom,
 #endif
 
 #if (AMREX_SPACEDIM == 2)
-    m_is_rz = Geometry::IsRZ();
+    m_is_rz = m_geom[0][0].IsRZ();
 #endif
 }
 
@@ -204,7 +199,7 @@ MLNodeLaplacian::compDivergence (const Vector<MultiFab*>& rhs, const Vector<Mult
                 amrex_mlndlap_impose_neumann_bc(BL_TO_FORTRAN_BOX(bx),
                                                 BL_TO_FORTRAN_ANYD((*rhs[ilev])[mfi]),
                                                 BL_TO_FORTRAN_BOX(nddom),
-                                                m_lobc.data(), m_hibc.data());
+                                                m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -245,13 +240,13 @@ MLNodeLaplacian::compDivergence (const Vector<MultiFab*>& rhs, const Vector<Mult
                 Box b = bx_vel & cc_fvbx;
                 for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
                 {
-                    if (m_lobc[idim] == LinOpBCType::inflow)
+                    if (m_lobc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.smallEnd(idim) == cccdom.smallEnd(idim)) {
                             b.growLo(idim, 1);
                         }
                     }
-                    if (m_hibc[idim] == LinOpBCType::inflow)
+                    if (m_hibc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.bigEnd(idim) == cccdom.bigEnd(idim)) {
                             b.growHi(idim, 1);
@@ -348,7 +343,7 @@ MLNodeLaplacian::compDivergence (const Vector<MultiFab*>& rhs, const Vector<Mult
                                               BL_TO_FORTRAN_ANYD(c_cc_mask[mfi]),
                                               BL_TO_FORTRAN_ANYD(crhs[mfi]),
                                               cdxinv, BL_TO_FORTRAN_BOX(cnddom),
-                                              m_lobc.data(), m_hibc.data());
+                                              m_lobc[0].data(), m_hibc[0].data());
             }
         }
 
@@ -416,11 +411,12 @@ MLNodeLaplacian::compRHS (const Vector<MultiFab*>& rhs, const Vector<MultiFab*>&
 
 #ifdef AMREX_USE_EB
             bool regular = !factory;
+            FabType typ = FabType::regular;
             if (factory)
             {
                 const auto& flag = (*flags)[mfi];
                 const auto& ccbx = amrex::grow(amrex::enclosedCells(bx),1);
-                const auto& typ = flag.getType(ccbx);
+                typ = flag.getType(ccbx);
                 if (typ == FabType::covered)
                 {
                     (*rhs[ilev])[mfi].setVal(0.0, bx);
@@ -454,21 +450,35 @@ MLNodeLaplacian::compRHS (const Vector<MultiFab*>& rhs, const Vector<MultiFab*>&
                 amrex_mlndlap_impose_neumann_bc(BL_TO_FORTRAN_BOX(bx),
                                                 BL_TO_FORTRAN_ANYD((*rhs[ilev])[mfi]),
                                                 BL_TO_FORTRAN_BOX(nddom),
-                                                m_lobc.data(), m_hibc.data());
+                                                m_lobc[0].data(), m_hibc[0].data());
             }
 
             if (rhcc[ilev])
             {
-                amrex_mlndlap_rhcc(BL_TO_FORTRAN_BOX(bx),
-                                   BL_TO_FORTRAN_ANYD((*rhs_cc[ilev])[mfi]),
-                                   BL_TO_FORTRAN_ANYD((*rhcc[ilev])[mfi]),
-                                   BL_TO_FORTRAN_ANYD(dmsk[mfi]));
+#ifdef AMREX_USE_EB
+                if (typ == FabType::singlevalued)
+                {
+                    amrex_mlndlap_rhcc_eb(BL_TO_FORTRAN_BOX(bx),
+                                          BL_TO_FORTRAN_ANYD((*rhs_cc[ilev])[mfi]),
+                                          BL_TO_FORTRAN_ANYD((*rhcc[ilev])[mfi]),
+                                          BL_TO_FORTRAN_ANYD((*vfrac)[mfi]),
+                                          BL_TO_FORTRAN_ANYD((*intg)[mfi]),
+                                          BL_TO_FORTRAN_ANYD(dmsk[mfi]));
+                }
+                else if (typ == FabType::regular)
+#endif
+                {
+                    amrex_mlndlap_rhcc(BL_TO_FORTRAN_BOX(bx),
+                                       BL_TO_FORTRAN_ANYD((*rhs_cc[ilev])[mfi]),
+                                       BL_TO_FORTRAN_ANYD((*rhcc[ilev])[mfi]),
+                                       BL_TO_FORTRAN_ANYD(dmsk[mfi]));
+                }
 
                 if (m_coarsening_strategy == CoarseningStrategy::Sigma) {
                     amrex_mlndlap_impose_neumann_bc(BL_TO_FORTRAN_BOX(bx),
                                                     BL_TO_FORTRAN_ANYD((*rhs_cc[ilev])[mfi]),
                                                     BL_TO_FORTRAN_BOX(nddom),
-                                                    m_lobc.data(), m_hibc.data());
+                                                    m_lobc[0].data(), m_hibc[0].data());
                 }
             }
         }
@@ -510,13 +520,13 @@ MLNodeLaplacian::compRHS (const Vector<MultiFab*>& rhs, const Vector<MultiFab*>&
                 Box b = bx_vel & cc_fvbx;
                 for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
                 {
-                    if (m_lobc[idim] == LinOpBCType::inflow)
+                    if (m_lobc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.smallEnd(idim) == cccdom.smallEnd(idim)) {
                             b.growLo(idim, 1);
                         }
                     }
-                    if (m_hibc[idim] == LinOpBCType::inflow)
+                    if (m_hibc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.bigEnd(idim) == cccdom.bigEnd(idim)) {
                             b.growHi(idim, 1);
@@ -610,7 +620,7 @@ MLNodeLaplacian::compRHS (const Vector<MultiFab*>& rhs, const Vector<MultiFab*>&
                                               BL_TO_FORTRAN_ANYD(c_cc_mask[mfi]),
                                               BL_TO_FORTRAN_ANYD(crhs[mfi]),
                                               cdxinv, BL_TO_FORTRAN_BOX(cnddom),
-                                              m_lobc.data(), m_hibc.data());
+                                              m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -883,7 +893,7 @@ MLNodeLaplacian::FillBoundaryCoeff (MultiFab& sigma, const Geometry& geom)
             {
                 amrex_mlndlap_fillbc_cc(BL_TO_FORTRAN_ANYD(sigma[mfi]),
                                         BL_TO_FORTRAN_BOX(domain),
-                                        m_lobc.data(), m_hibc.data());
+                                        m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -900,9 +910,9 @@ MLNodeLaplacian::buildMasks ()
     m_masks_built = true;
 
     m_is_bottom_singular = false;
-    auto itlo = std::find(m_lobc.begin(), m_lobc.end(), BCType::Dirichlet);
-    auto ithi = std::find(m_hibc.begin(), m_hibc.end(), BCType::Dirichlet);
-    if (itlo == m_lobc.end() && ithi == m_hibc.end())
+    auto itlo = std::find(m_lobc[0].begin(), m_lobc[0].end(), BCType::Dirichlet);
+    auto ithi = std::find(m_hibc[0].begin(), m_hibc[0].end(), BCType::Dirichlet);
+    if (itlo == m_lobc[0].end() && ithi == m_hibc[0].end())
     {  // No Dirichlet
         m_is_bottom_singular = m_domain_covered[0];
     }
@@ -926,7 +936,7 @@ MLNodeLaplacian::buildMasks ()
 
                 Box ccdomain_p = ccdomain;
                 for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
-                    if (Geometry::isPeriodic(idim)) {
+                    if (geom.isPeriodic(idim)) {
                         ccdomain_p.grow(idim, 1);
                     }
                 }
@@ -958,7 +968,7 @@ MLNodeLaplacian::buildMasks ()
                         amrex_mlndlap_set_dirichlet_mask(BL_TO_FORTRAN_ANYD(mskfab),
                                                          BL_TO_FORTRAN_ANYD(ccfab),
                                                          BL_TO_FORTRAN_BOX(nddomain),
-                                                         m_lobc.data(), m_hibc.data());
+                                                         m_lobc[0].data(), m_hibc[0].data());
                     }
                 }
             }
@@ -1004,7 +1014,7 @@ MLNodeLaplacian::buildMasks ()
 
                 amrex_mlndlap_fillbc_cc_i(BL_TO_FORTRAN_ANYD(fab),
                                           BL_TO_FORTRAN_BOX(ccdom),
-                                          m_lobc.data(), m_hibc.data());
+                                          m_lobc[0].data(), m_hibc[0].data());
             }
         }
 
@@ -1054,7 +1064,7 @@ MLNodeLaplacian::buildMasks ()
                                        BL_TO_FORTRAN_ANYD(dfab),
                                        BL_TO_FORTRAN_ANYD(sfab),
                                        BL_TO_FORTRAN_BOX(nddomain),
-                                       m_lobc.data(), m_hibc.data());
+                                       m_lobc[0].data(), m_hibc[0].data());
         }
     }
 
@@ -1084,7 +1094,7 @@ MLNodeLaplacian::buildMasks ()
                                        BL_TO_FORTRAN_ANYD(dfab),
                                        BL_TO_FORTRAN_ANYD(sfab),
                                        BL_TO_FORTRAN_BOX(nddomain),
-                                       m_lobc.data(), m_hibc.data());
+                                       m_lobc[0].data(), m_hibc[0].data());
         }
     }
 }
@@ -1094,18 +1104,19 @@ MLNodeLaplacian::buildStencil ()
 {
     // todo:gpu
     m_stencil.resize(m_num_amr_levels);
+    m_s0_norm0.resize(m_num_amr_levels);
     for (int amrlev = 0; amrlev < m_num_amr_levels; ++amrlev)
     {
         m_stencil[amrlev].resize(m_num_mg_levels[amrlev]);
+        m_s0_norm0[amrlev].resize(m_num_mg_levels[amrlev],0.0);
     }
     
     if (m_coarsening_strategy != CoarseningStrategy::RAP) return;
 
     const int ncomp_s = (AMREX_SPACEDIM == 2) ? 5 : 9;
-    const int ncomp_c = (AMREX_SPACEDIM == 2) ? 6 : 27;
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(AMREX_SPACEDIM != 1,
                                      "MLNodeLaplacian::buildStencil: 1d not supported");
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!Geometry::IsRZ(),
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!m_geom[0][0].IsRZ(),
                                      "MLNodeLaplacian::buildStencil: cylindrical not supported for RAP");
 
     for (int amrlev = 0; amrlev < m_num_amr_levels; ++amrlev)
@@ -1149,6 +1160,7 @@ MLNodeLaplacian::buildStencil ()
                     const FArrayBox& sgfab_orig = (*m_sigma[amrlev][0][0])[mfi];
                     
 #ifdef AMREX_USE_EB
+                    const int ncomp_c = (AMREX_SPACEDIM == 2) ? 6 : 27;
                     bool regular = !factory;
                     if (factory)
                     {
@@ -1264,6 +1276,10 @@ MLNodeLaplacian::buildStencil ()
             m_stencil[amrlev][mglev]->FillBoundary(m_geom[amrlev][mglev].periodicity());
         }
     }
+
+
+    // This is only needed at the bottom.
+    m_s0_norm0[0].back() = m_stencil[0].back()->norm0(0,0) * m_normalization_threshold;
 }
 
 void
@@ -1412,7 +1428,7 @@ MLNodeLaplacian::interpolation (int amrlev, int fmglev, MultiFab& fine, const Mu
                                                             BL_TO_FORTRAN_ANYD(szfab)),
                                                BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                                BL_TO_FORTRAN_BOX(nd_domain),
-                                               m_lobc.data(), m_hibc.data());
+                                               m_lobc[0].data(), m_hibc[0].data());
             }
             else
             {
@@ -1423,7 +1439,7 @@ MLNodeLaplacian::interpolation (int amrlev, int fmglev, MultiFab& fine, const Mu
                                                BL_TO_FORTRAN_ANYD(sfab),
                                                BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                                BL_TO_FORTRAN_BOX(nd_domain),
-                                               m_lobc.data(), m_hibc.data());
+                                               m_lobc[0].data(), m_hibc[0].data());
             }
             fine[mfi].plus(tmpfab,fbx,fbx,0,0,1);
         }
@@ -1466,7 +1482,6 @@ MLNodeLaplacian::restrictInteriorNodes (int camrlev, MultiFab& crhs, MultiFab& a
     }
 
     const Geometry& cgeom = m_geom[camrlev  ][0];
-    const Box& c_cc_domain = cgeom.Domain();
 
     const iMultiFab& fdmsk = *m_dirichlet_mask[camrlev+1][0];
     const auto& stencil    =  m_stencil[camrlev+1][0];
@@ -1547,7 +1562,7 @@ MLNodeLaplacian::applyBC (int amrlev, int mglev, MultiFab& phi, BCMode/* bc_mode
             {
                 amrex_mlndlap_applybc(BL_TO_FORTRAN_ANYD(phi[mfi]),
                                       BL_TO_FORTRAN_BOX(nd_domain),
-                                      m_lobc.data(), m_hibc.data());
+                                      m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -1597,7 +1612,7 @@ MLNodeLaplacian::Fapply (int amrlev, int mglev, MultiFab& out, const MultiFab& i
                                                 BL_TO_FORTRAN_ANYD(szfab)),
                                    BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                    dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                   m_lobc.data(), m_hibc.data());
+                                   m_lobc[0].data(), m_hibc[0].data());
         }
         else
         {
@@ -1609,7 +1624,7 @@ MLNodeLaplacian::Fapply (int amrlev, int mglev, MultiFab& out, const MultiFab& i
                                    BL_TO_FORTRAN_ANYD(sfab),
                                    BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                    dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                   m_lobc.data(), m_hibc.data());
+                                   m_lobc[0].data(), m_hibc[0].data());
         }
     }
 }
@@ -1665,7 +1680,7 @@ MLNodeLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiFab& 
                                                            BL_TO_FORTRAN_ANYD(szfab)),
                                               BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                               dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                              m_lobc.data(), m_hibc.data());
+                                              m_lobc[0].data(), m_hibc[0].data());
             }
         }
         else
@@ -1684,7 +1699,7 @@ MLNodeLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiFab& 
                                               BL_TO_FORTRAN_ANYD(sfab),
                                               BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                               dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                              m_lobc.data(), m_hibc.data());
+                                              m_lobc[0].data(), m_hibc[0].data());
             }
         }
 
@@ -1738,7 +1753,7 @@ MLNodeLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiFab& 
                                                      BL_TO_FORTRAN_ANYD(szfab)),
                                         BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                         dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                        m_lobc.data(), m_hibc.data());
+                                        m_lobc[0].data(), m_hibc[0].data());
             }
         }
         else
@@ -1758,7 +1773,7 @@ MLNodeLaplacian::Fsmooth (int amrlev, int mglev, MultiFab& sol, const MultiFab& 
                                         BL_TO_FORTRAN_ANYD(sfab),
                                         BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                         dxinv, BL_TO_FORTRAN_BOX(domain_box),
-                                        m_lobc.data(), m_hibc.data());
+                                        m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -1774,6 +1789,7 @@ MLNodeLaplacian::normalize (int amrlev, int mglev, MultiFab& mf) const
     const auto& stencil = m_stencil[amrlev][mglev];
     const Real* dxinv = m_geom[amrlev][mglev].InvCellSize();
     const iMultiFab& dmsk = *m_dirichlet_mask[amrlev][mglev];
+    const Real s0_norm0 = m_s0_norm0[amrlev][mglev];
 
 #ifdef _OPENMP
 #pragma omp parallel
@@ -1787,7 +1803,8 @@ MLNodeLaplacian::normalize (int amrlev, int mglev, MultiFab& mf) const
             amrex_mlndlap_normalize_sten(BL_TO_FORTRAN_BOX(bx),
                                          BL_TO_FORTRAN_ANYD(fab),
                                          BL_TO_FORTRAN_ANYD((*stencil)[mfi]),
-                                         BL_TO_FORTRAN_ANYD(dmsk[mfi]));
+                                         BL_TO_FORTRAN_ANYD(dmsk[mfi]),
+                                         s0_norm0);
         }
         else if (m_use_harmonic_average && mglev > 0)
         {
@@ -1867,7 +1884,7 @@ MLNodeLaplacian::compSyncResidualCoarse (MultiFab& sync_resid, const MultiFab& a
 
             amrex_mlndlap_fillbc_cc_i(BL_TO_FORTRAN_ANYD(fab),
                                       BL_TO_FORTRAN_BOX(ccdom),
-                                      m_lobc.data(), m_hibc.data());
+                                      m_lobc[0].data(), m_hibc[0].data());
         }
     }
 
@@ -1901,7 +1918,7 @@ MLNodeLaplacian::compSyncResidualCoarse (MultiFab& sync_resid, const MultiFab& a
             {
                 amrex_mlndlap_applybc(BL_TO_FORTRAN_ANYD(phi[mfi]),
                                       BL_TO_FORTRAN_BOX(nddom),
-                                      m_lobc.data(), m_hibc.data());
+                                      m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -1933,13 +1950,13 @@ MLNodeLaplacian::compSyncResidualCoarse (MultiFab& sync_resid, const MultiFab& a
                 Box b = ccbxg1 & ccvbx;
                 for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
                 {
-                    if (m_lobc[idim] == LinOpBCType::inflow)
+                    if (m_lobc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.smallEnd(idim) == ccdom.smallEnd(idim)) {
                             b.growLo(idim, 1);
                         }
                     }
-                    if (m_hibc[idim] == LinOpBCType::inflow)
+                    if (m_hibc[0][idim] == LinOpBCType::inflow)
                     {
                         if (b.bigEnd(idim) == ccdom.bigEnd(idim)) {
                             b.growHi(idim, 1);
@@ -1987,14 +2004,14 @@ MLNodeLaplacian::compSyncResidualCoarse (MultiFab& sync_resid, const MultiFab& a
                                        BL_TO_FORTRAN_ANYD(sigma),
                                        BL_TO_FORTRAN_ANYD(dmsk[mfi]),
                                        dxinv, BL_TO_FORTRAN_BOX(nddom),
-                                       m_lobc.data(), m_hibc.data());
+                                       m_lobc[0].data(), m_hibc[0].data());
 
                 amrex_mlndlap_crse_resid(BL_TO_FORTRAN_BOX(bx),
                                          BL_TO_FORTRAN_ANYD(sync_resid[mfi]),
                                          BL_TO_FORTRAN_ANYD(rhs),
                                          BL_TO_FORTRAN_ANYD(crse_cc_mask[mfi]),
                                          BL_TO_FORTRAN_BOX(nddom),
-                                         m_lobc.data(), m_hibc.data());
+                                         m_lobc[0].data(), m_hibc[0].data());
             }
         }
     }
@@ -2041,13 +2058,13 @@ MLNodeLaplacian::compSyncResidualFine (MultiFab& sync_resid, const MultiFab& phi
             Box ovlp = ccvbx & ccbxg1;
             for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
             {
-                if (m_lobc[idim] == LinOpBCType::inflow)
+                if (m_lobc[0][idim] == LinOpBCType::inflow)
                 {
                     if (ovlp.smallEnd(idim) == ccdom.smallEnd(idim)) {
                         ovlp.growLo(idim, 1);
                     }
                 }
-                if (m_hibc[idim] == LinOpBCType::inflow)
+                if (m_hibc[0][idim] == LinOpBCType::inflow)
                 {
                     if (ovlp.bigEnd(idim) == ccdom.bigEnd(idim)) {
                         ovlp.growHi(idim, 1);
@@ -2098,7 +2115,7 @@ MLNodeLaplacian::compSyncResidualFine (MultiFab& sync_resid, const MultiFab& phi
                                    BL_TO_FORTRAN_ANYD(*sigma),
                                    BL_TO_FORTRAN_ANYD(tmpmask),
                                    dxinv, BL_TO_FORTRAN_BOX(nddom),
-                                   m_lobc.data(), m_hibc.data());
+                                   m_lobc[0].data(), m_hibc[0].data());
 
             sync_resid[mfi].xpay(-1.0, rhs, bx, bx, 0, 0, 1);
 
@@ -2227,7 +2244,7 @@ MLNodeLaplacian::reflux (int crse_amrlev,
                                          BL_TO_FORTRAN_ANYD((*cc_mask)[mfi]),
                                          BL_TO_FORTRAN_ANYD(fine_contrib_on_crse[mfi]),
                                          cdxinv, BL_TO_FORTRAN_BOX(c_nd_domain),
-                                         m_lobc.data(), m_hibc.data());
+                                         m_lobc[0].data(), m_hibc[0].data());
         }
     }
 #ifdef AMREX_USE_EB
@@ -2289,14 +2306,10 @@ MLNodeLaplacian::buildIntegral ()
         }
     }
 #else
-#ifdef AMREX_USE_ALGOIM
     for (int amrlev = 0; amrlev < m_num_amr_levels; ++amrlev)
     {
-        amrex::compute_integrals(*m_integral[amrlev]);
+        amrex::algoim::compute_integrals(*m_integral[amrlev]);
     }
-#else
-    amrex::Abort("Need to set USE_ALGOIM = TRUE in order to build 3D EB integrals");
-#endif
 #endif
 }
 #endif
@@ -2329,24 +2342,24 @@ MLNodeLaplacian::checkPoint (std::string const& file_name) const
                        << "has_metric_term = " << info.has_metric_term << "\n"
                        << "max_coarsening_level = " << info.max_coarsening_level << "\n";
 #if (AMREX_SPACEDIM == 1)
-            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0]) << "\n";
+            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0][0]) << "\n";
 #elif (AMREX_SPACEDIM == 2)
-            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0])
-                       << " "       << static_cast<int>(m_lobc[1]) << "\n";
+            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0][0])
+                       << " "       << static_cast<int>(m_lobc[0][1]) << "\n";
 #else
-            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0])
-                       << " "       << static_cast<int>(m_lobc[1])
-                       << " "       << static_cast<int>(m_lobc[2]) << "\n";
+            HeaderFile << "lobc = " << static_cast<int>(m_lobc[0][0])
+                       << " "       << static_cast<int>(m_lobc[0][1])
+                       << " "       << static_cast<int>(m_lobc[0][2]) << "\n";
 #endif
 #if (AMREX_SPACEDIM == 1)
-            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0]) << "\n";
+            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0][0]) << "\n";
 #elif (AMREX_SPACEDIM == 2)
-            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0])
-                       << " "       << static_cast<int>(m_hibc[1]) << "\n";
+            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0][0])
+                       << " "       << static_cast<int>(m_hibc[0][1]) << "\n";
 #else
-            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0])
-                       << " "       << static_cast<int>(m_hibc[1])
-                       << " "       << static_cast<int>(m_hibc[2]) << "\n";
+            HeaderFile << "hibc = " << static_cast<int>(m_hibc[0][0])
+                       << " "       << static_cast<int>(m_hibc[0][1])
+                       << " "       << static_cast<int>(m_hibc[0][2]) << "\n";
 #endif
             // m_coarse_data_for_bc: not used
             HeaderFile << "maxorder = " << getMaxOrder() << "\n";

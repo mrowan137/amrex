@@ -7,6 +7,9 @@
 #include <AMReX_FArrayBox.H>
 #include <AMReX_IntVect.H>
 
+#include <AMReX_ParmParse.H>
+#include <AMReX_Geometry.H>
+
 namespace amrex {
 
 namespace
@@ -517,14 +520,13 @@ int
 Particle<NReal, NInt>::NextID ()
 {
     int next;
-
-#ifdef _OPENMP
-#if (__GNUC__ < 5)
+// we should be able to test on _OPENMP < 201107 for capture (version 3.1)
+// but we must work around a bug in gcc < 4.9
+#if defined(_OPENMP) && _OPENMP < 201307
 #pragma omp critical (amrex_particle_nextid)
-#else
+#elif defined(_OPENMP)
 #pragma omp atomic capture
-#endif
-#endif
+#endif    
     next = the_next_id++;
 
     if (next > LastParticleID)

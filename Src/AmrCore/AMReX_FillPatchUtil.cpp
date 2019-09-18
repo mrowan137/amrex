@@ -194,12 +194,10 @@ namespace amrex
                         amrex::setBC(dbx,fdomain,bcscomp,0,ncomp,bcs,bcr);
 
                         pre_interp(sfab, sfab.box(), 0, ncomp);
-                        
-                        FArrayBox const* sfabp = mf_crse_patch.fabPtr(mfi);
-                        FArrayBox* dfabp = mf.fabPtr(gi);
-                        mapper->interp(*sfabp,
+
+                        mapper->interp(sfab,
                                        0,
-                                       *dfabp,
+                                       dfab,
                                        dcomp,
                                        ncomp,
                                        dbx,
@@ -207,7 +205,7 @@ namespace amrex
                                        cgeom,
                                        fgeom,
                                        bcr,
-                                       idummy1, idummy2);
+                                       idummy1, idummy2, RunOn::Gpu);
 
                         post_interp(dfab, dbx, dcomp, ncomp);
                     }
@@ -231,9 +229,15 @@ namespace amrex
                              const InterpHook& pre_interp,
                              const InterpHook& post_interp)
     {
+#ifdef AMREX_USE_EB
+        EB2::IndexSpace const* index_space = EB2::TopIndexSpaceIfPresent();
+#else
+        EB2::IndexSpace const* index_space = nullptr;
+#endif
+
         FillPatchTwoLevels_doit(mf,time,cmf,ct,fmf,ft,scomp,dcomp,ncomp,cgeom,fgeom,
                                 cbc,cbccomp,fbc,fbccomp,ratio,mapper,bcs,bcscomp,
-                                pre_interp,post_interp,nullptr);
+                                pre_interp,post_interp,index_space);
     }
 
 #ifdef AMREX_USE_EB
@@ -329,11 +333,9 @@ namespace amrex
 
                 pre_interp(sfab, sfab.box(), 0, ncomp);
 
-                FArrayBox const* sfabp = mf_crse_patch.fabPtr(mfi);
-                FArrayBox* dfabp = mf.fabPtr(mfi);
-                mapper->interp(*sfabp,
+                mapper->interp(sfab,
                                0,
-                               *dfabp,
+                               dfab,
                                dcomp,
                                ncomp,
                                dbx,
@@ -341,7 +343,7 @@ namespace amrex
                                cgeom,
                                fgeom,
                                bcr,
-                               idummy1, idummy2);
+                               idummy1, idummy2, RunOn::Gpu);
 
                 post_interp(dfab, dbx, dcomp, ncomp);
             }
@@ -369,6 +371,8 @@ namespace amrex
                                      const Geometry& cgeom, const Geometry& fgeom,
                                      int ref_ratio)
     {
+        // TODO gpu
+
         BL_ASSERT(ref_ratio == 2);
 
         const IntVect& ngrow = fine[0]->nGrowVect();
