@@ -1007,21 +1007,6 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>::SortParticles
 
 template <int NStructReal, int NStructInt, int NArrayReal, int NArrayInt>
 void
-ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>::
-SortParticlesByBin (const ParIterBase<false,NStructReal,NStructInt,NArrayReal,NArrayInt>& pti, int ng, 
-		    Gpu::ManagedDeviceVector<int>& bin_start, 
-		    Gpu::ManagedDeviceVector<int>& bin_stop, 
-		    const IntVect& bin_size)
-{
-#ifdef AMREX_USE_CUDA
-  
-    BL_PROFILE("ParticleContainer::SortParticlesByBin()");
-  
-#endif
-}
-
-template <int NStructReal, int NStructInt, int NArrayReal, int NArrayInt>
-void
 ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
 ::RedistributeGPU (int lev_min, int lev_max, int nGrow, int local)
 {
