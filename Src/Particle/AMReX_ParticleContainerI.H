@@ -1349,9 +1349,12 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
                                 search_begin + num_grids + 1,
                                 grid_end.begin());
         
-            thrust::host_vector<int> start(grid_begin);
-            thrust::host_vector<int> stop(grid_end);
-        
+            thrust::host_vector<int> start(grid_begin.size());
+            thrust::host_vector<int> stop(grid_end.size());
+
+            Gpu::thrust_copy(grid_begin.begin(), grid_begin.end(), start.begin());
+            Gpu::thrust_copy(grid_end.begin(), grid_end.end(), stop.begin());                             
+            
             std::map<int, size_t> grid_counts;
             for (int i = 0; i < num_grids; ++i)
                 {
