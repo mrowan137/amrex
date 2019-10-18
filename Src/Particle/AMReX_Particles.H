@@ -1062,7 +1062,8 @@ protected:
 
     Gpu::ManagedDeviceVector<int> m_grids_tmp;
     Gpu::ManagedDeviceVector<int> m_levs_tmp;
-
+    Gpu::ManagedDeviceVector<int> m_index_sequence_tmp;
+    
     ParticleVector m_aos_to_redistribute;
     std::vector<RealVector> m_real_arrays_to_redistribute;
     std::vector<IntVector > m_int_arrays_to_redistribute;
