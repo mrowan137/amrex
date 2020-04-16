@@ -61,12 +61,13 @@ WarpX::LoadBalance ()
         }
                 
         amrex::Vector<long> recvcount, disp;
+        //amrex::Vector<long> disp;
         recvcount.resize(ParallelDescriptor::NProcs(), 0);
         recvcount.assign(ParallelDescriptor::NProcs(), 0);
         disp.resize(ParallelDescriptor::NProcs(), 0);
         disp.assign(ParallelDescriptor::NProcs(), 0);
 
-        int n_cost = cost_to_send.size();
+        long n_cost = cost_to_send.size();
         ParallelDescriptor::Gather(&n_cost, 1,
                                    &recvcount[0], 1,
                                    ParallelDescriptor::IOProcessorNumber());
@@ -74,7 +75,6 @@ WarpX::LoadBalance ()
         for (int i=1; i<disp.size(); i++)
         {
             disp[i] = disp[i-1] + recvcount[i-1];
-            //amrex::Print() << "MyProc=" << ParallelDescriptor::MyProc() << "disp[i]=" << disp[i] << '\n';
         }
         
         amrex::Vector<Real> new_index_to_cost;
