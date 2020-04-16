@@ -25,6 +25,7 @@ WarpX::LoadBalance ()
 
     if (WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Heuristic)
     {
+        // compute the costs on a per-rank basis
         WarpX::ComputeCostsHeuristic(costs);
     }
 
