@@ -384,14 +384,14 @@ DistributionMapping::RoundRobinDoIt (int                  nboxes,
     Vector<Vector<int> > wrkerord;
 
     if (nteams == nprocs)  {
-	LeastUsedCPUs(nprocs,ord);
-	wrkerord.resize(nprocs);
-	for (int i = 0; i < nprocs; ++i) {
-	    wrkerord[i].resize(1);
-	    wrkerord[i][0] = 0;
-	}
+        LeastUsedCPUs(nprocs,ord);
+        wrkerord.resize(nprocs);
+        for (int i = 0; i < nprocs; ++i) {
+            wrkerord[i].resize(1);
+            wrkerord[i][0] = 0;
+        }
     } else {
-	LeastUsedTeams(ord,wrkerord,nteams,nworkers);
+        LeastUsedTeams(ord,wrkerord,nteams,nworkers);
     }
 
     Vector<int> w(nteams,0);
@@ -724,9 +724,7 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
     std::vector< std::vector<int> > vec;
 
     efficiency = 0;
-
     knapsack(wgts,nteams,vec,efficiency,do_full_knapsack,nmax);
-
     if (flag_verbose_mapper) {
         for (int i = 0; i < vec.size(); ++i) {
             Print() << "  Bucket " << i << " contains boxes:" << std::endl;
@@ -741,7 +739,6 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
     std::vector<LIpair> LIpairV;
 
     LIpairV.reserve(nteams);
-
     for (int i = 0; i < nteams; ++i)
     {
 	long wgt = 0;
@@ -753,8 +750,8 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
 
         LIpairV.push_back(LIpair(wgt,i));
     }
-
-    Sort(LIpairV, true);
+    
+    if (sort) Sort(LIpairV, true);
 
     if (flag_verbose_mapper) {
         for (const auto &p : LIpairV) {
@@ -765,17 +762,41 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
     Vector<int> ord;
     Vector<Vector<int> > wrkerord;
 
+    bool sort=false;
     if (nteams == nprocs) {
-	LeastUsedCPUs(nprocs,ord);
-	wrkerord.resize(nprocs);
-	for (int i = 0; i < nprocs; ++i) {
-	    wrkerord[i].resize(1);
-	    wrkerord[i][0] = 0;
-	}
+        if (sort) {
+            LeastUsedCPUs(nprocs,ord);
+        } else {
+            ord.resize(nprocs);
+            std::iota(ord.begin(), ord.end(), 0);
+        }
     } else {
-	LeastUsedTeams(ord,wrkerord,nteams,nworkers);
+        if (sort) {
+            LeastUsedTeams(ord,wrkerord,nteams,nworkers);
+        } else {
+            ord.resize(nteams);
+            std::iota(ord.begin(), ord.end(), 0);
+            wrkerord.resize(nteams);
+            for (auto& v : wrkerord) {
+                v.resize(nworkers);
+                std::iota(v.begin(), v.end(), 0);
+            }
+        }
     }
-
+    
+    // Vector<int> ord;
+    // Vector<Vector<int> > wrkerord;
+    // if (nteams == nprocs) {
+    //     LeastUsedCPUs(nprocs,ord);
+    //     wrkerord.resize(nprocs);
+    //     for (int i = 0; i < nprocs; ++i) {
+    //         wrkerord[i].resize(1);
+    //         wrkerord[i][0] = 0;
+    //     }
+    // } else {
+    //     LeastUsedTeams(ord,wrkerord,nteams,nworkers);
+    // }
+    
     for (int i = 0; i < nteams; ++i)
     {
         const int idx = LIpairV[i].second;
@@ -805,7 +826,6 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
 #endif
 	}
     }
-
     if (verbose)
     {
 	amrex::Print() << "KNAPSACK efficiency: " << efficiency << '\n';
