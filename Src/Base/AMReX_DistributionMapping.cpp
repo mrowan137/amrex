@@ -751,51 +751,26 @@ DistributionMapping::KnapSackDoIt (const std::vector<long>& wgts,
         LIpairV.push_back(LIpair(wgt,i));
     }
     
-    if (sort) Sort(LIpairV, true);
+    Sort(LIpairV, true);
 
     if (flag_verbose_mapper) {
         for (const auto &p : LIpairV) {
             Print() << "  Bucket " << p.second << " total weight: " << p.first << std::endl;
         }
     }
-
+    
     Vector<int> ord;
     Vector<Vector<int> > wrkerord;
-
-    bool sort=false;
     if (nteams == nprocs) {
-        if (sort) {
-            LeastUsedCPUs(nprocs,ord);
-        } else {
-            ord.resize(nprocs);
-            std::iota(ord.begin(), ord.end(), 0);
+        LeastUsedCPUs(nprocs,ord);
+        wrkerord.resize(nprocs);
+        for (int i = 0; i < nprocs; ++i) {
+            wrkerord[i].resize(1);
+            wrkerord[i][0] = 0;
         }
     } else {
-        if (sort) {
-            LeastUsedTeams(ord,wrkerord,nteams,nworkers);
-        } else {
-            ord.resize(nteams);
-            std::iota(ord.begin(), ord.end(), 0);
-            wrkerord.resize(nteams);
-            for (auto& v : wrkerord) {
-                v.resize(nworkers);
-                std::iota(v.begin(), v.end(), 0);
-            }
-        }
+        LeastUsedTeams(ord,wrkerord,nteams,nworkers);
     }
-    
-    // Vector<int> ord;
-    // Vector<Vector<int> > wrkerord;
-    // if (nteams == nprocs) {
-    //     LeastUsedCPUs(nprocs,ord);
-    //     wrkerord.resize(nprocs);
-    //     for (int i = 0; i < nprocs; ++i) {
-    //         wrkerord[i].resize(1);
-    //         wrkerord[i][0] = 0;
-    //     }
-    // } else {
-    //     LeastUsedTeams(ord,wrkerord,nteams,nworkers);
-    // }
     
     for (int i = 0; i < nteams; ++i)
     {
@@ -1475,7 +1450,7 @@ DistributionMapping::makeKnapSack (const MultiFab& weight, Real& eff, int nmax)
             int i = mfi.index();
             rcost[i] = weight[mfi].sum<RunOn::Device>(mfi.validbox(),0);
         }
-
+        amrex::AllPrint() << "Hello I am " << ParallelDescriptor::MyProc() << ", and rcost.size()=" << rcost.size();
         ParallelAllReduce::Sum(&rcost[0], rcost.size(), ParallelContext::CommunicatorSub());
 
         Real wmax = *std::max_element(rcost.begin(), rcost.end());
