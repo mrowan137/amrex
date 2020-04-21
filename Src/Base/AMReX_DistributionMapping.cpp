@@ -1410,7 +1410,31 @@ DistributionMapping::makeKnapSack (const Vector<Real>& rcost, Real& eff, int nma
 
     return r;
 }
-  
+
+DistributionMapping
+DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost, Real& eff, int nmax, bool sort,
+                                   bool broadcastToAll)
+{
+    BL_PROFILE("makeKnapSack");
+
+    DistributionMapping r;
+
+    Vector<Long> cost(rcost.size());
+
+    Real wmax = *std::max_element(rcost.begin(), rcost.end());
+    Real scale = (wmax == 0) ? 1.e9 : 1.e9/wmax;
+
+    for (int i = 0; i < rcost.size(); ++i) {
+        cost[i] = Long(rcost[i]*scale) + 1L;
+    }
+
+    int nprocs = ParallelContext::NProcsSub();
+
+    r.KnapSackProcessorMap(cost, nprocs, &eff, true, nmax, sort);
+
+    return r;
+}
+
 DistributionMapping
 DistributionMapping::makeKnapSack (const MultiFab& weight, int nmax)
 {

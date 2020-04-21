@@ -169,6 +169,12 @@ class DistributionMapping
     static DistributionMapping makeKnapSack   (const Vector<Real>& rcost, Real& eff,
                                                int nmax=std::numeric_limits<int>::max(),
                                                bool sort=true);
+    static DistributionMapping makeKnapSack   (const LayoutData<Real>& rcost,
+                                               Real& eff,
+                                               int nmax=std::numeric_limits<int>::max(),
+                                               bool sort=true,
+                                               bool broadcastToAll=true,
+                                               int root=ParallelDescriptor::IOProcessorNumber());
 
     static DistributionMapping makeRoundRobin (const MultiFab& weight);
     static DistributionMapping makeSFC        (const MultiFab& weight, bool sort=true);
