@@ -148,14 +148,19 @@ WarpX::LoadBalance ()
         const amrex::Real nprocs = ParallelContext::NProcsSub();
         const int nmax = static_cast<int>(std::ceil(nboxes/nprocs*load_balance_knapsack_factor));
 
-        newdm = DistributionMapping::makeKnapSack2(costsLayoutData,
+        newdm = DistributionMapping::makeKnapSack(costsLayoutData,
                                                    currentEfficiency, proposedEfficiency,
-                                                   nmax, false, false,
+                                                   nmax, false,
                                                    ParallelDescriptor::IOProcessorNumber());
             
-        // newdm = (load_balance_with_sfc)
-        //     ? DistributionMapping::makeSFC(*costs[lev], boxArray(lev), proposedEfficiency, false)
-        //     : DistributionMapping::makeKnapSack(*costs[lev], proposedEfficiency, nmax, false);
+        newdm = (load_balance_with_sfc)
+            ? DistributionMapping::makeSFC(costsLayoutData,
+                                                currentEfficiency, proposedEfficiency,
+                                                false, ParallelDescriptor::IOProcessorNumber())
+            : DistributionMapping::makeKnapSack(costsLayoutData,
+                                           currentEfficiency, proposedEfficiency,
+                                           nmax, false,
+                                           ParallelDescriptor::IOProcessorNumber());
 
         // Root has all the information to decide
         //amrex::AllPrint() << ParallelDescriptor::MyProc() << "::Current  efficiency: " << currentEfficiency  << "\n";
