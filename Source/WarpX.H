@@ -502,9 +502,9 @@ public:
      * @param[out] efficiency average cost per MPI process computed from the
      * given distribution mapping and and cost
      */
-    void ComputeDistributionMappingEfficiency (const amrex::DistributionMapping& dm,
-                                               const amrex::Vector<amrex::Real>& cost,
-                                               amrex::Real& efficiency);
+    // void ComputeDistributionMappingEfficiency (const amrex::DistributionMapping& dm,
+    //                                            const amrex::Vector<amrex::Real>& cost,
+    //                                            amrex::Real& efficiency);
 
 protected:
 
