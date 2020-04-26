@@ -54,6 +54,7 @@ WarpX::LoadBalance ()
         //amrex::Vector<Real> cost_to_send;
         //cost_to_send.resize(Ex.local_size(), 0.0);
         LayoutData<Real> costsLayoutData(boxArray(lev), DistributionMap(lev));
+        
         for (auto i : costsLayoutData.IndexArray())
         {
             // amrex::AllPrint() << "my i=" << i << "\n";
@@ -147,20 +148,17 @@ WarpX::LoadBalance ()
         const amrex::Real nboxes = costs[lev]->size();
         const amrex::Real nprocs = ParallelContext::NProcsSub();
         const int nmax = static_cast<int>(std::ceil(nboxes/nprocs*load_balance_knapsack_factor));
-
-        newdm = DistributionMapping::makeKnapSack(costsLayoutData,
-                                                   currentEfficiency, proposedEfficiency,
-                                                   nmax, false,
-                                                   ParallelDescriptor::IOProcessorNumber());
             
         newdm = (load_balance_with_sfc)
             ? DistributionMapping::makeSFC(costsLayoutData,
-                                                currentEfficiency, proposedEfficiency,
-                                                false, ParallelDescriptor::IOProcessorNumber())
-            : DistributionMapping::makeKnapSack(costsLayoutData,
                                            currentEfficiency, proposedEfficiency,
-                                           nmax, false,
-                                           ParallelDescriptor::IOProcessorNumber());
+                                           false,
+                                           ParallelDescriptor::IOProcessorNumber())
+            : DistributionMapping::makeKnapSack(costsLayoutData,
+                                                currentEfficiency, proposedEfficiency,
+                                                nmax,
+                                                false,
+                                                ParallelDescriptor::IOProcessorNumber());
 
         // Root has all the information to decide
         //amrex::AllPrint() << ParallelDescriptor::MyProc() << "::Current  efficiency: " << currentEfficiency  << "\n";
