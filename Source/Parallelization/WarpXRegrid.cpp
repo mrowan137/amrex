@@ -402,6 +402,8 @@ WarpX::RemakeLevel (int lev, Real /*time*/, const BoxArray& ba, const Distributi
     {
         amrex::Abort("RemakeLevel: to be implemented");
     }
+    // Re-initialize diagnostic functors that stores pointers to the user-requested fields at level, lev.
+    multi_diags->InitializeFieldFunctors( lev );
 }
 
 void
