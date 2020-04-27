@@ -20,7 +20,7 @@ WarpX::LoadBalance ()
     WARPX_PROFILE("WarpX::LoadBalance()");
 
     AMREX_ALWAYS_ASSERT(costs[0] != nullptr);
-    
+
 #ifdef AMREX_USE_MPI
 
     if (WarpX::load_balance_costs_update_algo == LoadBalanceCostsUpdateAlgo::Heuristic)
@@ -38,7 +38,7 @@ WarpX::LoadBalance ()
     {
         MultiFab* Ex = Efield_fp[lev][0].get();
         LayoutData<Real> costsLayoutData(boxArray(lev), DistributionMap(lev));
-        
+
         for (auto i : costsLayoutData.IndexArray())
         {
             costsLayoutData[i] = (*costs[lev])[i];
@@ -53,7 +53,7 @@ WarpX::LoadBalance ()
         // normalized to max cost) for current and proposed distribution mappings
         amrex::Real currentEfficiency = 0.0;
         amrex::Real proposedEfficiency = 0.0;
-            
+
         newdm = (load_balance_with_sfc)
             ? DistributionMapping::makeSFC(costsLayoutData,
                                            currentEfficiency, proposedEfficiency,
@@ -86,14 +86,14 @@ WarpX::LoadBalance ()
             } else
             {
                 pmap.resize(newdm.ProcessorMap().size())
-            }                 
+            }
             ParallelDescriptor::Bcast(&pmap[0], pmap.size(), ParallelDescriptor::IOProcessorNumber());
-            
+
             if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber())
             {
                 newdm = DistributionMapping(pmap);
             }
-            
+
             RemakeLevel(lev, t_new[lev], boxArray(lev), newdm);
         }
     }
