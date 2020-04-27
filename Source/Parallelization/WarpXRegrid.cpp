@@ -36,118 +36,23 @@ WarpX::LoadBalance ()
     const int nLevels = finestLevel();
     for (int lev = 0; lev <= nLevels; ++lev)
     {
-        // Gather prelims:
-        // gather(n_elems_to_send, &recvcount[0], root) // recvcount
-        // compute displ from recvcount
-        
-        // Gather quantities to root:
-        // These all have the pattern
-        //     gatherv(&my_quantity[0], my_quantity.size(),
-        //             &root_recvbuf[0], root_recvcount,
-        //             rootproc)
-        //     new_index_to_old_index: [i,j,k, p,q, r,s,t,v, ..., a,b,c]    gatherv mfi.index()
-        //     new_index_to_rank:      [1,1,1, 2,2, 3,3,3,3, ..., n,n,n]    gatherv MyProc()
-        //     new_index_to_costs:     [0,5,3, 2,6, 2,3,4,3, ..., x,y,z]    gatherv costs[lev]()
-        //     old_index_to_rank(dm):  pre-gather index --> rank
-
         MultiFab* Ex = Efield_fp[lev][0].get();
-        //amrex::Vector<Real> cost_to_send;
-        //cost_to_send.resize(Ex.local_size(), 0.0);
         LayoutData<Real> costsLayoutData(boxArray(lev), DistributionMap(lev));
         
         for (auto i : costsLayoutData.IndexArray())
         {
-            // amrex::AllPrint() << "my i=" << i << "\n";
-            // amrex::AllPrint() << "my cost=" << (*costs[lev])[i] << "\n";
-            // amrex::AllPrint() << "cost[lev].size()" << costs[lev]->size() << "\n";
-            // amrex::AllPrint() << "my localind=" << costsLayoutData.localindex(i) << "\n";
-            //costsLayoutData[costsLayoutData.localindex(i)] = *costs[lev])[i];
             costsLayoutData[i] = (*costs[lev])[i];
         }
-            
-        // amrex::Vector<int> index_to_send;
 
-        // MultiFab* Ex = Efield_fp[lev][0].get();
-        // for (MFIter mfi(*Ex, false); mfi.isValid(); ++mfi)
-        // {            
-        //     cost_to_send.push_back((*costs[lev])[mfi.index()]);
-        //     index_to_send.push_back(mfi.index());
-        // }
-                
-        // amrex::Vector<long> recvcount, disp;
-        // //amrex::Vector<long> disp;
-        // recvcount.resize(ParallelDescriptor::NProcs(), 0);
-        // recvcount.assign(ParallelDescriptor::NProcs(), 0);
-        // disp.resize(ParallelDescriptor::NProcs(), 0);
-        // disp.assign(ParallelDescriptor::NProcs(), 0);
-
-        // long n_cost = cost_to_send.size();
-        // ParallelDescriptor::Gather(&n_cost, 1,
-        //                            &recvcount[0], 1,
-        //                            ParallelDescriptor::IOProcessorNumber());
-        
-        // for (int i=1; i<disp.size(); i++)
-        // {
-        //     disp[i] = disp[i-1] + recvcount[i-1];
-        // }
-        
-        // amrex::Vector<Real> new_index_to_cost;
-        // amrex::Vector<int> new_index_to_old_index;
-        // new_index_to_cost.resize(costs[lev]->size(), 0.0);
-        // new_index_to_cost.assign(costs[lev]->size(), 0.0);
-        // new_index_to_old_index.resize(costs[lev]->size(), 0);
-        // new_index_to_old_index.assign(costs[lev]->size(), 0);
-        
-        // ParallelDescriptor::Gatherv(&cost_to_send[0],
-        //                             cost_to_send.size(),
-        //                             &new_index_to_cost[0],
-        //                             recvcount,
-        //                             disp,
-        //                             ParallelDescriptor::IOProcessorNumber());
-                
-        // ParallelDescriptor::Gatherv(&index_to_send[0],
-        //                             index_to_send.size(),
-        //                             &new_index_to_old_index[0],
-        //                             recvcount,
-        //                             disp,
-        //                             ParallelDescriptor::IOProcessorNumber());
-        
-        // Now work just on the root
-        // ^With these, compute the cost in pre-gather index space
-        // if (ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber())
-        // {
-        //     // Invert the new_ind-->old_ind
-        //     Vector<int> old_index_to_new_index;
-        //     old_index_to_new_index.resize(costs[lev]->size(), 0);
-        //     old_index_to_new_index.assign(costs[lev]->size(), 0);
-        //     for (int i=0; i<old_index_to_new_index.size(); i++)
-        //     {
-        //         old_index_to_new_index[new_index_to_old_index[i]] = i;
-        //     }
-        
-        //     for (int i=0; i<costs[lev]->size(); i++)
-        //     {
-        //         (*costs[lev])[i] = new_index_to_cost[old_index_to_new_index[i]];
-        //     }
-        // }
-
-        // Decide whether to load balance based on cost
-        // To store efficiency (meaning, the  average 'cost' over all ranks, normalized to the
-        // max cost) for current distribution mapping
-        amrex::Real currentEfficiency = 0.0;
-        // To store efficiency for proposed distribution mapping
-        amrex::Real proposedEfficiency = 0.0;
+        // Compute the new distribution mapping
         DistributionMapping newdm;
-        
-        // // Compute efficiency for the current distribution mapping
-        // const DistributionMapping& currentdm = DistributionMap(lev);
-        // ComputeDistributionMappingEfficiency(currentdm, *costs[lev],
-        //                                      currentEfficiency);
-
-        // // Arguments for the load balancing
         const amrex::Real nboxes = costs[lev]->size();
         const amrex::Real nprocs = ParallelContext::NProcsSub();
         const int nmax = static_cast<int>(std::ceil(nboxes/nprocs*load_balance_knapsack_factor));
+        // These store efficiency (meaning, the  average 'cost' over all ranks,
+        // normalized to max cost) for current and proposed distribution mappings
+        amrex::Real currentEfficiency = 0.0;
+        amrex::Real proposedEfficiency = 0.0;
             
         newdm = (load_balance_with_sfc)
             ? DistributionMapping::makeSFC(costsLayoutData,
@@ -159,50 +64,41 @@ WarpX::LoadBalance ()
                                                 nmax,
                                                 false,
                                                 ParallelDescriptor::IOProcessorNumber());
-
-        // Root has all the information to decide
-        //amrex::AllPrint() << ParallelDescriptor::MyProc() << "::Current  efficiency: " << currentEfficiency  << "\n";
-        //amrex::AllPrint() << ParallelDescriptor::MyProc() << "::Proposed efficiency: " << proposedEfficiency << "\n";
+        // As specified in the above calls to makeSFC and makeKnapSack, the newdm
+        // is NOT communicated to all ranks; the loadbalanced distribution mapping
+        // is up-to-date only on root, and we can decide whether to broadcast
         if (load_balance_efficiency_ratio_threshold > 0.0
             & ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber())
         {
-            amrex::Print() << currentEfficiency << "-->" << proposedEfficiency << " \n";
+            amrex::Print() << "curr: " << currentEfficiency << ", prop: " << proposedEfficiency << "\n";
             doLoadBalance = (proposedEfficiency > load_balance_efficiency_ratio_threshold*currentEfficiency);
         }
 
-        // Broadcast the cost to all proc
         ParallelDescriptor::Bcast(&doLoadBalance, 1,
                                   ParallelDescriptor::IOProcessorNumber());
-        
+
         if (doLoadBalance)
         {
             Vector<int> pmap;
-            pmap.resize(DistributionMap(lev).size(), 0);
-            pmap.assign(DistributionMap(lev).size(), 0);
             if (ParallelDescriptor::MyProc() == ParallelDescriptor::IOProcessorNumber())
             {
                 pmap = newdm.ProcessorMap();
-                // For root, get the index array from distribution mapping
-                //for (int i=0; i<pmap.size(); i++)
-                //{
-                // pmap[i] = newdm[i];
-                //}
-            }
-            
-            //Broadcastv newdm, or just the vector from which to construct
+            } else
+            {
+                pmap.resize(newdm.ProcessorMap().size())
+            }                 
             ParallelDescriptor::Bcast(&pmap[0], pmap.size(), ParallelDescriptor::IOProcessorNumber());
+            
             if (ParallelDescriptor::MyProc() != ParallelDescriptor::IOProcessorNumber())
             {
                 newdm = DistributionMapping(pmap);
             }
-
-            //amrex::AllPrint() << "myproc=" << ParallelDescriptor::MyProc() << ", dm=" << newdm << '\n';
+            
             RemakeLevel(lev, t_new[lev], boxArray(lev), newdm);
         }
     }
     if (doLoadBalance)
     {
-        amrex::Print() << "We do the load balance!\n";
         mypc->Redistribute();
     }
 #endif
@@ -444,39 +340,3 @@ WarpX::ResetCosts ()
         costs[lev]->assign((*costs[lev]).size(), 0.0);
     }
 }
-
-// void
-// WarpX::ComputeDistributionMappingEfficiency (const DistributionMapping& dm,
-//                                              const Vector<Real>& cost,
-//                                              Real& efficiency)
-// {
-//     const Real nprocs = ParallelDescriptor::NProcs();
-
-//     // Collect costs per fab corresponding to each rank, then collapse into vector
-//     // of total cost per proc
-
-//     // This will store mapping from (proc) --> ([cost_FAB_1, cost_FAB_2, ... ])
-//     // for each proc
-//     std::map<int, Vector<Real>> rankToCosts;
-
-//     for (int i=0; i<cost.size(); ++i)
-//     {
-//         rankToCosts[dm[i]].push_back(cost[i]);
-//     }
-
-//     Real maxCost = -1.0;
-
-//     // This will store mapping from (proc) --> (sum of cost) for each proc
-//     Vector<Real> rankToCost = {0.0};
-//     rankToCost.resize(nprocs);
-//     for (int i=0; i<nprocs; ++i) {
-//         const Real rwSum = std::accumulate(rankToCosts[i].begin(),
-//                                            rankToCosts[i].end(), 0.0);
-//         rankToCost[i] = rwSum;
-//         maxCost = std::max(maxCost, rwSum);
-//     }
-
-//     // `efficiency` is mean cost per proc
-//     efficiency = (std::accumulate(rankToCost.begin(),
-//                   rankToCost.end(), 0.0) / (nprocs*maxCost));
-// }
