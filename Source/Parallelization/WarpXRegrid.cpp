@@ -85,7 +85,7 @@ WarpX::LoadBalance ()
                 pmap = newdm.ProcessorMap();
             } else
             {
-                pmap.resize(newdm.ProcessorMap().size())
+                pmap.resize(newdm.ProcessorMap().size());
             }
             ParallelDescriptor::Bcast(&pmap[0], pmap.size(), ParallelDescriptor::IOProcessorNumber());
 
