@@ -255,7 +255,7 @@ ifeq ($(USE_CUDA),TRUE)
   CUDA_ARCH ?= 70
 
   # Maximum number of CUDA threads per block.
-  CUDA_MAX_THREADS ?= 256
+  CUDA_MAX_THREADS ?= 1024
 
   # Limit the maximum number of registers available.
   CUDA_MAXREGCOUNT ?= 255
