@@ -147,38 +147,17 @@ computeElapsedTimeUserdata (const std::vector<std::unique_ptr<CUpti_Activity_Use
         return 0.0;
     }
   
-    std::map<int, unsigned long long> streamIDToElapsedTimeMap;
+    // std::map<int, unsigned long long> streamIDToElapsedTimeMap;
     
-    // Initialize tally of unique streams
+    double start = DBL_MAX;
+    double end = -DBL_MAX;
     for (auto& record : activityRecordUserdata) {
-        if (streamIDToElapsedTimeMap.find(record->getStreamID())
-            == streamIDToElapsedTimeMap.end()) {
-            // Not found
-            streamIDToElapsedTimeMap[record->getStreamID()] = 0;
-        } else {
-            // Found
-        }
+      start = std::min(start, record->getStartTime());
+      end = std::max(end, record->getEndTime());
     }
-
-    // Sum kernel times in each stream
-    for (auto& record : activityRecordUserdata) {
-        streamIDToElapsedTimeMap[record->getStreamID()] += record->getTimeElapsed();
-    }
-
-    // Sum over streams
-    unsigned long long res = 0;
-    for (auto const& kv : streamIDToElapsedTimeMap) {
-        res += kv.second;
-    }  
-
-    // Average time per kernel
-    res /= (1.*activityRecordUserdata.size());
-
-    // Alternative: average time per stream
-    //res /= streamIDToElapsedTimeMap.size();
-  
+    
     // Default is ns, convert to sec
-    return (double) res*1e-9;
+    return end - start;
 }
 
 void
