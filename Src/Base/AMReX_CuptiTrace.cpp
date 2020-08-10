@@ -152,8 +152,8 @@ computeElapsedTimeUserdata (const std::vector<std::unique_ptr<CUpti_Activity_Use
     double start = DBL_MAX;
     double end = -DBL_MAX;
     for (auto& record : activityRecordUserdata) {
-      start = std::min(start, record->getStartTime());
-      end = std::max(end, record->getEndTime());
+      start = std::min(start, double(record->getStartTime()));
+      end = std::max(end, double(record->getEndTime()));
     }
     
     // Default is ns, convert to sec
