@@ -27,7 +27,7 @@ void main_main ()
     {
         // This parameter can control GPU compute work
         int n_cell = 256;
-        int max_grid_size = 16;
+        int max_grid_size = 128;
         ParmParse pp;
         pp.query("n_cell", n_cell);
         pp.query("max_grid_size", max_grid_size);

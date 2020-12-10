@@ -1,0 +1,49 @@
+Initializing CUDA...
+CUDA initialized with 1 GPU
+AMReX (20.04-900-ge47d1a807a34-dirty) initialized
+
+
+TinyProfiler total time across processes [min...avg...max]: 0.05031 ... 0.05031 ... 0.05031
+
+-------------------------------------------------------------------------------------------
+Name                                        NCalls  Excl. Min  Excl. Avg  Excl. Max   Max %
+-------------------------------------------------------------------------------------------
+gpu_clock                                        1    0.03488    0.03488    0.03488  69.34%
+FabArray::setVal()                               8   0.008334   0.008334   0.008334  16.57%
+gpu_clock_shared_PTX                             1   0.002305   0.002305   0.002305   4.58%
+gpu_clock_shared                                 1   0.002291   0.002291   0.002291   4.55%
+reduce_sum                                       1   0.000669   0.000669   0.000669   1.33%
+CUDA_Events                                      1  0.0005556  0.0005556  0.0005556   1.10%
+synchronization                                  1   0.000485   0.000485   0.000485   0.96%
+baseline                                         1  0.0003533  0.0003533  0.0003533   0.70%
+DistributionMapping::SFCProcessorMapDoIt()       1  6.813e-06  6.813e-06  6.813e-06   0.01%
+Fuser::Launch()                                 17  6.795e-06  6.795e-06  6.795e-06   0.01%
+DistributionMapping::Distribute()                1   4.13e-06   4.13e-06   4.13e-06   0.01%
+-------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------------------
+Name                                        NCalls  Incl. Min  Incl. Avg  Incl. Max   Max %
+-------------------------------------------------------------------------------------------
+gpu_clock                                        1    0.03488    0.03488    0.03488  69.34%
+FabArray::setVal()                               8   0.008337   0.008337   0.008337  16.57%
+gpu_clock_shared_PTX                             1   0.002305   0.002305   0.002305   4.58%
+gpu_clock_shared                                 1   0.002292   0.002292   0.002292   4.56%
+reduce_sum                                       1  0.0006699  0.0006699  0.0006699   1.33%
+CUDA_Events                                      1  0.0005559  0.0005559  0.0005559   1.10%
+synchronization                                  1  0.0004854  0.0004854  0.0004854   0.96%
+baseline                                         1  0.0003537  0.0003537  0.0003537   0.70%
+DistributionMapping::SFCProcessorMapDoIt()       1  1.094e-05  1.094e-05  1.094e-05   0.02%
+Fuser::Launch()                                 17  6.795e-06  6.795e-06  6.795e-06   0.01%
+DistributionMapping::Distribute()                1   4.13e-06   4.13e-06   4.13e-06   0.01%
+-------------------------------------------------------------------------------------------
+
+Total GPU global memory (MB): 16128
+Free  GPU global memory (MB): 14790
+[The         Arena] space allocated (MB): 12096
+[The         Arena] space used      (MB): 0
+[The  Device Arena] space allocated (MB): 8
+[The  Device Arena] space used      (MB): 0
+[The Managed Arena] space allocated (MB): 8
+[The Managed Arena] space used      (MB): 0
+[The  Pinned Arena] space allocated (MB): 8
+[The  Pinned Arena] space used      (MB): 0
