@@ -1344,9 +1344,9 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
           ptile_ptrs.push_back(&(kv.second));
       }
 
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
+// #ifdef _OPENMP
+// #pragma omp parallel for
+// #endif
       for (int pmap_it = 0; pmap_it < static_cast<int>(ptile_ptrs.size()); ++pmap_it)
       {
           int thread_num = OpenMP::get_thread_num();
@@ -1493,9 +1493,9 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
           pvec_ptrs.push_back(&(pmap_it->second));
       }
 
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
+// #ifdef _OPENMP
+// #pragma omp parallel for
+// #endif
       for (int pit = 0; pit < static_cast<int>(pvec_ptrs.size()); ++pit)
       {
           auto index = grid_tile_ids[pit];
@@ -1536,9 +1536,9 @@ ParticleContainer<NStructReal, NStructInt, NArrayReal, NArrayInt>
       pbuff_ptrs.push_back(&(kv.second));
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
+// #ifdef _OPENMP
+// #pragma omp parallel for
+// #endif
   for (int pmap_it = 0; pmap_it < static_cast<int>(pbuff_ptrs.size()); ++pmap_it)
   {
       int who = dest_proc_ids[pmap_it];
