@@ -204,6 +204,12 @@ class DistributionMapping
                                              Real& currentEfficiency, Real& proposedEfficiency,
                                              int nmax=std::numeric_limits<int>::max(),
                                              bool broadcastToAll=true,
+                                             int root=ParallelDescriptor::IOProcessorNumber()
+                                             );
+    static DistributionMapping makeKnapSack (const LayoutData<Real>& rcost_local,
+                                             Real& currentEfficiency, Real& proposedEfficiency,
+                                             int nmax=std::numeric_limits<int>::max(),
+                                             bool broadcastToAll=true,
                                              int root=ParallelDescriptor::IOProcessorNumber(),
                                              bool skip_init=false);
 

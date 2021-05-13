@@ -571,6 +571,7 @@ public:
     }
 };
 
+    // mine
 static
 void
 knapsack (const std::vector<Long>&         wgts,
@@ -584,13 +585,85 @@ knapsack (const std::vector<Long>&         wgts,
 {
     BL_PROFILE("knapsack()");
 
-    Vector<WeightedBoxList> wblv;
-    wblv.reserve(nprocs);
-    Real max_weight = 0;
-    Real sum_weight = 0;
+    // Real max_weight = 0;
+    // Real sum_weight = 0;
+    // Vector<WeightedBoxList> wblv;
+    // wblv.reserve(nprocs);
+    // result.resize(nprocs);
+        
+    // if (!skip_init)
+    // {
+    //     //
+    //     // Sort balls by size largest first.
+    //     //
+        
+    //     Vector<WeightedBox> lb;
+    //     lb.reserve(wgts.size());
+    //     for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    //     {
+    //         lb.push_back(WeightedBox(i, wgts[i]));
+    //     }
+    //     std::sort(lb.begin(), lb.end());
+    //     //
+    //     // For each ball, starting with heaviest, assign ball to the lightest bin.
+    //     //
+    //     std::priority_queue<WeightedBoxList> wblq;
+    //     Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
+    //     for (int i  = 0; i < nprocs; ++i)
+    //     {
+    //         raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
+    //         wblq.push(WeightedBoxList(raii_vwb[i].get()));
+    //     }
+
+    //     for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    //     {
+    //         if (!wblq.empty()) {
+    //             WeightedBoxList wbl = wblq.top();
+    //             wblq.pop();
+    //             wbl.push_back(lb[i]);
+    //             if (wbl.size() < nmax) {
+    //                 wblq.push(wbl);
+    //             } else {
+    //                 wblv.push_back(wbl);
+    //             }
+    //         } else {
+    //             int ip = static_cast<int>(i) % nprocs;
+    //             wblv[ip].push_back(lb[i]);
+    //         }
+    //     }
+        
+    //     for (auto const& wbl : wblv)
+    //     {
+    //         Real wgt = wbl.weight();
+    //         sum_weight += wgt;
+    //         max_weight = std::max(wgt, max_weight);
+    //     }
+        
+    //     while (!wblq.empty())
+    //     {
+    //         WeightedBoxList wbl = wblq.top();
+    //         wblq.pop();
+    //         if (wbl.size() > 0) {
+    //             Real wgt = wbl.weight();
+    //             sum_weight += wgt;
+    //             max_weight = std::max(wgt, max_weight);
+    //             wblv.push_back(wbl);
+    //         }
+    //     }
+        
+    //     efficiency = sum_weight/(nprocs*max_weight);
+        
+    //     std::sort(wblv.begin(), wblv.end());
+    // }
+    
+// now for mine
         
     if (!skip_init)
     {
+        Vector<WeightedBoxList> wblv;
+        wblv.reserve(nprocs);
+        Real max_weight = 0;
+        Real sum_weight = 0;
         //
         // Sort balls by size largest first.
         //
@@ -651,19 +724,151 @@ knapsack (const std::vector<Long>&         wgts,
         
         efficiency = sum_weight/(nprocs*max_weight);
         
-        std::sort(wblv.begin(), wblv.end()); 
-    }
-    else
-    {
-        // need to update wblv; compute efficiency; result
-        auto dm = rcost.DistributionMap();
-        for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        std::sort(wblv.begin(), wblv.end());
+        
+        if (efficiency < max_efficiency && do_full_knapsack
+            && wblv.size() > 1 && wblv.begin()->size() > 1)
         {
-            wblv[dm[i]].push_back(WeightedBox(i, wgts[i]));
+            BL_PROFILE_VAR("knapsack()swap", swap);
+        top: ;
+            
+            if (efficiency < max_efficiency && wblv.begin()->size() > 1)
+            {
+                auto bl_top = wblv.begin();
+                auto bl_bottom = wblv.end()-1;
+                Long w_top = bl_top->weight();
+                Long w_bottom = bl_bottom->weight();
+                for (auto ball_1 = bl_top->begin(); ball_1 != bl_top->end(); ++ball_1)
+                {
+                    for (auto ball_2 = bl_bottom->begin(); ball_2 != bl_bottom->end(); ++ball_2)
+                    {
+                        // should we swap ball 1 and ball 2?
+                        Long dw = ball_1->weight() - ball_2->weight();
+                        Long w_top_new    = w_top    - dw;
+                        Long w_bottom_new = w_bottom + dw;
+                        if (w_top_new < w_top && w_bottom_new < w_top)
+                        {
+                            std::swap(*ball_1, *ball_2);
+                            bl_top->addWeight(-dw);
+                            bl_bottom->addWeight(dw);
+                            
+                            if (bl_top+1 == bl_bottom)  // they are next to each other
+                            {
+                                if (*bl_bottom < *bl_top) {
+                                    std::swap(*bl_top, *bl_bottom);
+                                }
+                            }
+                            else
+                            {
+                                // bubble up
+                                auto it = std::lower_bound(bl_top+1, bl_bottom, *bl_bottom);
+                                std::rotate(it, bl_bottom, bl_bottom+1);
+                                
+                                // sink down
+                                it = std::lower_bound(bl_top+1, bl_bottom+1, *bl_top);
+                                std::rotate(bl_top, bl_top+1, it);
+                            }
+                            
+                            max_weight = bl_top->weight();
+                            efficiency = sum_weight / (nprocs*max_weight);
+                            goto top;
+                        }
+                    }
+                }
+            }
+            
+            BL_ASSERT(std::is_sorted(wblv.begin(), wblv.end()));
         }
         
+        for (int i = 0, N = wblv.size(); i < N; ++i)
+        {
+            const WeightedBoxList& wbl = wblv[i];
+            
+            result[i].reserve(wbl.size());
+            for (auto const& wb : wbl)
+            {
+                result[i].push_back(wb.boxid());
+            }
+        }
+    }
+    else // the other
+    {
+        Vector<WeightedBoxList> wblv;
+        wblv.reserve(nprocs);
+        Real max_weight = 0;
+        Real sum_weight = 0;
+        
+        //!!!
+        // // need to update wblv; compute efficiency; result
+        // auto dm = rcost.DistributionMap();
+        // for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        // {
+        //     wblv[dm[i]].push_back(WeightedBox(i, wgts[i]));
+        // }
+        
+        // result.resize(nprocs);
+
+        // for (auto const& wbl : wblv)
+        // {
+        //     Real wgt = wbl.weight();
+        //     sum_weight += wgt;
+        //     max_weight = std::max(wgt, max_weight);
+        // }
+        
+        // efficiency = sum_weight/(nprocs*max_weight);
+        //!!!
+
+        //!!!
         result.resize(nprocs);
 
+        auto dm = rcost.DistributionMap();        
+        Vector<WeightedBox> lb;
+        //lb.reserve(wgts.size());
+        // for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        // {
+        //     amrex::Print() << "pushing " << dm[i] << "; wgts[i] " << wgts[i];
+        //     wblv[dm[i]].push_back(WeightedBox(i, wgts[i]));
+        //     // lb.push_back(WeightedBox(i, wgts[i]));
+        // }
+
+
+        for (unsigned int j = 0; j < nprocs; ++j)
+        {
+            WeightedBoxList wbl = WeightedBoxList(std::make_unique<Vector<WeightedBox> >().get());
+            for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+            {
+                // amrex::Print() << "wgts[i] " << wgts[i];
+                // amrex::Print() << "dm[i]" << dm[i];
+                if (j == dm[i]) { wbl.push_back(WeightedBox(i, wgts[i])); }
+            }
+            wblv.push_back(wbl);
+        }
+        //std::sort(lb.begin(), lb.end());
+        
+        // std::priority_queue<WeightedBoxList> wblq;
+        // Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
+        // for (int i  = 0; i < nprocs; ++i)
+        // {
+        //     raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
+        //     wblq.push(WeightedBoxList(raii_vwb[i].get()));
+        // }
+        // for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        // {
+        //     if (!wblq.empty()) {
+        //         WeightedBoxList wbl = wblq.top();
+        //         wblq.pop();
+        //         wbl.push_back(lb[i]);
+        //         if (wbl.size() < nmax) {
+        //             wblq.push(wbl);
+        //         } else {
+        //             wblv.push_back(wbl);
+        //         }
+        //     } else {
+                // int ip = static_cast<int>(i) % nprocs;
+                // wblv[ip].push_back(lb[i]);
+        //     }
+        //}
+        
         for (auto const& wbl : wblv)
         {
             Real wgt = wbl.weight();
@@ -671,9 +876,167 @@ knapsack (const std::vector<Long>&         wgts,
             max_weight = std::max(wgt, max_weight);
         }
         
+        // while (!wblq.empty())
+        // {
+        //     WeightedBoxList wbl = wblq.top();
+        //     wblq.pop();
+        //     if (wbl.size() > 0) {
+        //         Real wgt = wbl.weight();
+        //         sum_weight += wgt;
+        //         max_weight = std::max(wgt, max_weight);
+        //         wblv.push_back(wbl);
+        //     }
+        // }
+        
         efficiency = sum_weight/(nprocs*max_weight);
         
+        //std::sort(wblv.begin(), wblv.end());
+        //!!!
+        amrex::Print() << "the efficiency: " << efficiency;
+        if (efficiency < max_efficiency && do_full_knapsack
+        && wblv.size() > 1 && wblv.begin()->size() > 1)
+        {
+            BL_PROFILE_VAR("knapsack()swap", swap);
+        top2: ;
+            
+            if (efficiency < max_efficiency && wblv.begin()->size() > 1)
+            {
+                auto bl_top = wblv.begin();
+                auto bl_bottom = wblv.end()-1;
+                Long w_top = bl_top->weight();
+                Long w_bottom = bl_bottom->weight();
+                for (auto ball_1 = bl_top->begin(); ball_1 != bl_top->end(); ++ball_1)
+                {
+                    for (auto ball_2 = bl_bottom->begin(); ball_2 != bl_bottom->end(); ++ball_2)
+                    {
+                        // should we swap ball 1 and ball 2?
+                        Long dw = ball_1->weight() - ball_2->weight();
+                        Long w_top_new    = w_top    - dw;
+                        Long w_bottom_new = w_bottom + dw;
+                        if (w_top_new < w_top && w_bottom_new < w_top)
+                        {
+                            std::swap(*ball_1, *ball_2);
+                            bl_top->addWeight(-dw);
+                            bl_bottom->addWeight(dw);
+                            
+                            if (bl_top+1 == bl_bottom)  // they are next to each other
+                            {
+                                if (*bl_bottom < *bl_top) {
+                                    std::swap(*bl_top, *bl_bottom);
+                                }
+                            }
+                            else
+                            {
+                                // bubble up
+                                auto it = std::lower_bound(bl_top+1, bl_bottom, *bl_bottom);
+                                std::rotate(it, bl_bottom, bl_bottom+1);
+                                
+                                // sink down
+                                it = std::lower_bound(bl_top+1, bl_bottom+1, *bl_top);
+                                std::rotate(bl_top, bl_top+1, it);
+                            }
+                            
+                            max_weight = bl_top->weight();
+                            efficiency = sum_weight / (nprocs*max_weight);
+                            goto top2;
+                        }
+                    }
+                }
+            }
+            
+            BL_ASSERT(std::is_sorted(wblv.begin(), wblv.end()));
+        }
+        
+        for (int i = 0, N = wblv.size(); i < N; ++i)
+        {
+            const WeightedBoxList& wbl = wblv[i];
+            
+            result[i].reserve(wbl.size());
+            for (auto const& wb : wbl)
+            {
+                result[i].push_back(wb.boxid());
+            }
+        }
     }
+
+}
+
+    static
+void
+knapsack (const std::vector<Long>&         wgts,
+          int                              nprocs,
+          std::vector< std::vector<int> >& result,
+          Real&                            efficiency,
+          bool                             do_full_knapsack,
+          int                              nmax)
+{
+    BL_PROFILE("knapsack()");
+
+    //
+    // Sort balls by size largest first.
+    //
+    result.resize(nprocs);
+
+    Vector<WeightedBox> lb;
+    lb.reserve(wgts.size());
+    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    {
+        lb.push_back(WeightedBox(i, wgts[i]));
+    }
+    std::sort(lb.begin(), lb.end());
+    //
+    // For each ball, starting with heaviest, assign ball to the lightest bin.
+    //
+    std::priority_queue<WeightedBoxList> wblq;
+    Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
+    for (int i  = 0; i < nprocs; ++i)
+    {
+        raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
+        wblq.push(WeightedBoxList(raii_vwb[i].get()));
+    }
+    Vector<WeightedBoxList> wblv;
+    wblv.reserve(nprocs);
+    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    {
+        if (!wblq.empty()) {
+            WeightedBoxList wbl = wblq.top();
+            wblq.pop();
+            wbl.push_back(lb[i]);
+            if (wbl.size() < nmax) {
+                wblq.push(wbl);
+            } else {
+                wblv.push_back(wbl);
+            }
+        } else {
+            int ip = static_cast<int>(i) % nprocs;
+            wblv[ip].push_back(lb[i]);
+        }
+    }
+
+    Real max_weight = 0;
+    Real sum_weight = 0;
+    for (auto const& wbl : wblv)
+    {
+        Real wgt = wbl.weight();
+        sum_weight += wgt;
+        max_weight = std::max(wgt, max_weight);
+    }
+
+    while (!wblq.empty())
+    {
+        WeightedBoxList wbl = wblq.top();
+        wblq.pop();
+        if (wbl.size() > 0) {
+            Real wgt = wbl.weight();
+            sum_weight += wgt;
+            max_weight = std::max(wgt, max_weight);
+            wblv.push_back(wbl);
+        }
+    }
+
+    efficiency = sum_weight/(nprocs*max_weight);
+
+    std::sort(wblv.begin(), wblv.end());
 
     if (efficiency < max_efficiency && do_full_knapsack
         && wblv.size() > 1 && wblv.begin()->size() > 1)
@@ -739,85 +1102,6 @@ top: ;
             result[i].push_back(wb.boxid());
         }
     }
-}
-
-    static
-void
-knapsack (const std::vector<Long>&         wgts,
-          int                              nprocs,
-          std::vector< std::vector<int> >& result,
-          Real&                            efficiency,
-          bool                             do_full_knapsack,
-          int                              nmax)
-{
-    BL_PROFILE("knapsack()");
-
-    Vector<WeightedBoxList> wblv;
-    wblv.reserve(nprocs);
-    Real max_weight = 0;
-    Real sum_weight = 0;
-        
-    //
-    // Sort balls by size largest first.
-    //
-    result.resize(nprocs);
-    
-    Vector<WeightedBox> lb;
-    lb.reserve(wgts.size());
-    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
-    {
-        lb.push_back(WeightedBox(i, wgts[i]));
-    }
-    std::sort(lb.begin(), lb.end());
-    //
-    // For each ball, starting with heaviest, assign ball to the lightest bin.
-    //
-    std::priority_queue<WeightedBoxList> wblq;
-    Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
-    for (int i  = 0; i < nprocs; ++i)
-    {
-        raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
-        wblq.push(WeightedBoxList(raii_vwb[i].get()));
-    }
-    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
-    {
-        if (!wblq.empty()) {
-            WeightedBoxList wbl = wblq.top();
-            wblq.pop();
-            wbl.push_back(lb[i]);
-            if (wbl.size() < nmax) {
-                wblq.push(wbl);
-            } else {
-                wblv.push_back(wbl);
-            }
-        } else {
-            int ip = static_cast<int>(i) % nprocs;
-            wblv[ip].push_back(lb[i]);
-        }
-    }
-    
-    for (auto const& wbl : wblv)
-    {
-        Real wgt = wbl.weight();
-        sum_weight += wgt;
-        max_weight = std::max(wgt, max_weight);
-    }
-    
-    while (!wblq.empty())
-    {
-        WeightedBoxList wbl = wblq.top();
-        wblq.pop();
-        if (wbl.size() > 0) {
-            Real wgt = wbl.weight();
-            sum_weight += wgt;
-            max_weight = std::max(wgt, max_weight);
-            wblv.push_back(wbl);
-        }
-    }
-    
-    efficiency = sum_weight/(nprocs*max_weight);
-    
-    std::sort(wblv.begin(), wblv.end()); 
 }
 
 void
@@ -947,7 +1231,8 @@ DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
     }
 
 }
-    
+
+    //mine
 void
 DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
                                    int                    /*  nprocs */,
@@ -981,6 +1266,7 @@ DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
     efficiency = 0;
 
     knapsack(wgts,nteams,vec,rcost,efficiency,do_full_knapsack,nmax,skip_init);
+    //knapsack(wgts,nteams,vec,efficiency,do_full_knapsack,nmax);
 
     if (flag_verbose_mapper) {
         for (int i = 0, ni = vec.size(); i < ni; ++i) {
@@ -1078,6 +1364,7 @@ DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
 
 }
 
+// mine
 void
 DistributionMapping::KnapSackProcessorMap (const std::vector<Long>& wgts,
                                            int                      nprocs,
@@ -1102,7 +1389,7 @@ DistributionMapping::KnapSackProcessorMap (const std::vector<Long>& wgts,
     else
     {
         Real eff = 0;
-        KnapSackDoIt(wgts, nprocs, rcost, eff, do_full_knapsack, nmax, sort);
+        KnapSackDoIt(wgts, nprocs, rcost, eff, do_full_knapsack, nmax, sort, skip_init);
         if (efficiency) *efficiency = eff;
     }
 }
@@ -1712,6 +1999,8 @@ DistributionMapping::makeKnapSack (const Vector<Real>& rcost, Real& eff, int nma
     return r;
 }
 
+
+// mine
 DistributionMapping
 DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost_local,
                                    Real& currentEfficiency, Real& proposedEfficiency,
@@ -1747,6 +2036,7 @@ DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost_local,
         // in the processor map function, but we are executing only on root
         int nprocs = ParallelDescriptor::NProcs();
         r.KnapSackProcessorMap(cost, nprocs, rcost_local, &proposedEfficiency, true, nmax, false, skip_init);
+        //r.KnapSackProcessorMap(cost, nprocs, &proposedEfficiency, true, nmax, false);
 
         ComputeDistributionMappingEfficiency(rcost_local.DistributionMap(),
                                              rcost,
