@@ -141,6 +141,12 @@ class DistributionMapping
                               bool do_full_knapsack=true,
                               int nmax=std::numeric_limits<int>::max(),
                               bool sort=true);
+    void KnapSackProcessorMap(const std::vector<Long>& wgts, int nprocs,
+                              const LayoutData<Real>& rcost, 
+                              Real* efficiency=0,
+                              bool do_full_knapsack=true,
+                              int nmax=std::numeric_limits<int>::max(),
+                              bool sort=true, bool skip_init=false);
     void RoundRobinProcessorMap(int nboxes, int nprocs, bool sort=true);
     void RoundRobinProcessorMap(const std::vector<Long>& wgts, int nprocs, bool sort=true);
 
@@ -198,7 +204,8 @@ class DistributionMapping
                                              Real& currentEfficiency, Real& proposedEfficiency,
                                              int nmax=std::numeric_limits<int>::max(),
                                              bool broadcastToAll=true,
-                                             int root=ParallelDescriptor::IOProcessorNumber());
+                                             int root=ParallelDescriptor::IOProcessorNumber(),
+                                             bool skip_init=false);
 
     static DistributionMapping makeRoundRobin (const MultiFab& weight);
     static DistributionMapping makeSFC (const MultiFab& weight, bool sort=true);
@@ -289,13 +296,22 @@ private:
                          int                  nprocs,
                          std::vector<LIpair>* LIpairV = 0,
                          bool                 sort = true);
-
+    
     void KnapSackDoIt (const std::vector<Long>& wgts,
                        int                      nprocs,
                        Real&                    efficiency,
                        bool                     do_full_knapsack,
                        int                      nmax=std::numeric_limits<int>::max(),
                        bool                     sort=true);
+    
+    void KnapSackDoIt (const std::vector<Long>& wgts,
+                       int                      nprocs,
+                       const LayoutData<Real>&  rcost,
+                       Real&                    efficiency,
+                       bool                     do_full_knapsack,
+                       int                      nmax=std::numeric_limits<int>::max(),
+                       bool                     sort=true,
+                       bool                     skip_init=true);
 
     void SFCProcessorMapDoIt (const BoxArray&          boxes,
                               const std::vector<Long>& wgts,

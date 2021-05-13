@@ -576,77 +576,104 @@ void
 knapsack (const std::vector<Long>&         wgts,
           int                              nprocs,
           std::vector< std::vector<int> >& result,
+          const LayoutData<Real>&          rcost,
           Real&                            efficiency,
           bool                             do_full_knapsack,
-          int                              nmax)
+          int                              nmax,
+          bool                             skip_init)
 {
     BL_PROFILE("knapsack()");
 
-    //
-    // Sort balls by size largest first.
-    //
-    result.resize(nprocs);
-
-    Vector<WeightedBox> lb;
-    lb.reserve(wgts.size());
-    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
-    {
-        lb.push_back(WeightedBox(i, wgts[i]));
-    }
-    std::sort(lb.begin(), lb.end());
-    //
-    // For each ball, starting with heaviest, assign ball to the lightest bin.
-    //
-    std::priority_queue<WeightedBoxList> wblq;
-    Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
-    for (int i  = 0; i < nprocs; ++i)
-    {
-        raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
-        wblq.push(WeightedBoxList(raii_vwb[i].get()));
-    }
     Vector<WeightedBoxList> wblv;
     wblv.reserve(nprocs);
-    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
-    {
-        if (!wblq.empty()) {
-            WeightedBoxList wbl = wblq.top();
-            wblq.pop();
-            wbl.push_back(lb[i]);
-            if (wbl.size() < nmax) {
-                wblq.push(wbl);
-            } else {
-                wblv.push_back(wbl);
-            }
-        } else {
-            int ip = static_cast<int>(i) % nprocs;
-            wblv[ip].push_back(lb[i]);
-        }
-    }
-
     Real max_weight = 0;
     Real sum_weight = 0;
-    for (auto const& wbl : wblv)
+        
+    if (!skip_init)
     {
-        Real wgt = wbl.weight();
-        sum_weight += wgt;
-        max_weight = std::max(wgt, max_weight);
-    }
-
-    while (!wblq.empty())
-    {
-        WeightedBoxList wbl = wblq.top();
-        wblq.pop();
-        if (wbl.size() > 0) {
+        //
+        // Sort balls by size largest first.
+        //
+        result.resize(nprocs);
+        
+        Vector<WeightedBox> lb;
+        lb.reserve(wgts.size());
+        for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        {
+            lb.push_back(WeightedBox(i, wgts[i]));
+        }
+        std::sort(lb.begin(), lb.end());
+        //
+        // For each ball, starting with heaviest, assign ball to the lightest bin.
+        //
+        std::priority_queue<WeightedBoxList> wblq;
+        Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
+        for (int i  = 0; i < nprocs; ++i)
+        {
+            raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
+            wblq.push(WeightedBoxList(raii_vwb[i].get()));
+        }
+        for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        {
+            if (!wblq.empty()) {
+                WeightedBoxList wbl = wblq.top();
+                wblq.pop();
+                wbl.push_back(lb[i]);
+                if (wbl.size() < nmax) {
+                    wblq.push(wbl);
+                } else {
+                    wblv.push_back(wbl);
+                }
+            } else {
+                int ip = static_cast<int>(i) % nprocs;
+                wblv[ip].push_back(lb[i]);
+            }
+        }
+        
+        for (auto const& wbl : wblv)
+        {
             Real wgt = wbl.weight();
             sum_weight += wgt;
             max_weight = std::max(wgt, max_weight);
-            wblv.push_back(wbl);
         }
+        
+        while (!wblq.empty())
+        {
+            WeightedBoxList wbl = wblq.top();
+            wblq.pop();
+            if (wbl.size() > 0) {
+                Real wgt = wbl.weight();
+                sum_weight += wgt;
+                max_weight = std::max(wgt, max_weight);
+                wblv.push_back(wbl);
+            }
+        }
+        
+        efficiency = sum_weight/(nprocs*max_weight);
+        
+        std::sort(wblv.begin(), wblv.end()); 
     }
+    else
+    {
+        // need to update wblv; compute efficiency; result
+        auto dm = rcost.DistributionMap();
+        for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+        {
+            wblv[dm[i]].push_back(WeightedBox(i, wgts[i]));
+        }
+        
+        result.resize(nprocs);
 
-    efficiency = sum_weight/(nprocs*max_weight);
-
-    std::sort(wblv.begin(), wblv.end());
+        for (auto const& wbl : wblv)
+        {
+            Real wgt = wbl.weight();
+            sum_weight += wgt;
+            max_weight = std::max(wgt, max_weight);
+        }
+        
+        efficiency = sum_weight/(nprocs*max_weight);
+        
+    }
 
     if (efficiency < max_efficiency && do_full_knapsack
         && wblv.size() > 1 && wblv.begin()->size() > 1)
@@ -712,6 +739,85 @@ top: ;
             result[i].push_back(wb.boxid());
         }
     }
+}
+
+    static
+void
+knapsack (const std::vector<Long>&         wgts,
+          int                              nprocs,
+          std::vector< std::vector<int> >& result,
+          Real&                            efficiency,
+          bool                             do_full_knapsack,
+          int                              nmax)
+{
+    BL_PROFILE("knapsack()");
+
+    Vector<WeightedBoxList> wblv;
+    wblv.reserve(nprocs);
+    Real max_weight = 0;
+    Real sum_weight = 0;
+        
+    //
+    // Sort balls by size largest first.
+    //
+    result.resize(nprocs);
+    
+    Vector<WeightedBox> lb;
+    lb.reserve(wgts.size());
+    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    {
+        lb.push_back(WeightedBox(i, wgts[i]));
+    }
+    std::sort(lb.begin(), lb.end());
+    //
+    // For each ball, starting with heaviest, assign ball to the lightest bin.
+    //
+    std::priority_queue<WeightedBoxList> wblq;
+    Vector<std::unique_ptr<Vector<WeightedBox> > > raii_vwb(nprocs);
+    for (int i  = 0; i < nprocs; ++i)
+    {
+        raii_vwb[i] = std::make_unique<Vector<WeightedBox> >();
+        wblq.push(WeightedBoxList(raii_vwb[i].get()));
+    }
+    for (unsigned int i = 0, N = wgts.size(); i < N; ++i)
+    {
+        if (!wblq.empty()) {
+            WeightedBoxList wbl = wblq.top();
+            wblq.pop();
+            wbl.push_back(lb[i]);
+            if (wbl.size() < nmax) {
+                wblq.push(wbl);
+            } else {
+                wblv.push_back(wbl);
+            }
+        } else {
+            int ip = static_cast<int>(i) % nprocs;
+            wblv[ip].push_back(lb[i]);
+        }
+    }
+    
+    for (auto const& wbl : wblv)
+    {
+        Real wgt = wbl.weight();
+        sum_weight += wgt;
+        max_weight = std::max(wgt, max_weight);
+    }
+    
+    while (!wblq.empty())
+    {
+        WeightedBoxList wbl = wblq.top();
+        wblq.pop();
+        if (wbl.size() > 0) {
+            Real wgt = wbl.weight();
+            sum_weight += wgt;
+            max_weight = std::max(wgt, max_weight);
+            wblv.push_back(wbl);
+        }
+    }
+    
+    efficiency = sum_weight/(nprocs*max_weight);
+    
+    std::sort(wblv.begin(), wblv.end()); 
 }
 
 void
@@ -841,8 +947,167 @@ DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
     }
 
 }
+    
+void
+DistributionMapping::KnapSackDoIt (const std::vector<Long>& wgts,
+                                   int                    /*  nprocs */,
+                                   const LayoutData<Real>&  rcost,
+                                   Real&                    efficiency,
+                                   bool                     do_full_knapsack,
+                                   int                      nmax,
+                                   bool                     sort,
+                                   bool                     skip_init)
+{
+    if (flag_verbose_mapper) {
+        Print() << "DM: KnapSackDoIt called..." << std::endl;
+    }
+
+    BL_PROFILE("DistributionMapping::KnapSackDoIt()");
+
+    int nprocs = ParallelContext::NProcsSub();
+
+    // If team is not use, we are going to treat it as a special case in which
+    // the number of teams is nprocs and the number of workers is 1.
+
+    int nteams = nprocs;
+    int nworkers = 1;
+#if defined(BL_USE_TEAM)
+    nteams = ParallelDescriptor::NTeams();
+    nworkers = ParallelDescriptor::TeamSize();
+#endif
+
+    std::vector< std::vector<int> > vec;
+
+    efficiency = 0;
+
+    knapsack(wgts,nteams,vec,rcost,efficiency,do_full_knapsack,nmax,skip_init);
+
+    if (flag_verbose_mapper) {
+        for (int i = 0, ni = vec.size(); i < ni; ++i) {
+            Print() << "  Bucket " << i << " contains boxes:" << std::endl;
+            for (int j = 0, nj = vec[i].size(); j < nj; ++j) {
+                Print() << "    " << vec[i][j] << std::endl;
+            }
+        }
+    }
+
+    BL_ASSERT(static_cast<int>(vec.size()) == nteams);
+
+    std::vector<LIpair> LIpairV;
+
+    LIpairV.reserve(nteams);
+
+    for (int i = 0; i < nteams; ++i)
+    {
+        Long wgt = 0;
+        for (std::vector<int>::const_iterator lit = vec[i].begin(), End = vec[i].end();
+             lit != End; ++lit)
+        {
+            wgt += wgts[*lit];
+        }
+
+        LIpairV.push_back(LIpair(wgt,i));
+    }
+
+    if (sort) {Sort(LIpairV, true);}
+
+    if (flag_verbose_mapper) {
+        for (const auto &p : LIpairV) {
+            Print() << "  Bucket " << p.second << " total weight: " << p.first << std::endl;
+        }
+    }
+
+    Vector<int> ord;
+    Vector<Vector<int> > wrkerord;
+
+    if (nteams == nprocs) {
+        if (sort) {
+            LeastUsedCPUs(nprocs,ord);
+        } else {
+            ord.resize(nprocs);
+            std::iota(ord.begin(), ord.end(), 0);
+        }
+    } else {
+        if (sort) {
+            LeastUsedTeams(ord,wrkerord,nteams,nworkers);
+        } else {
+            ord.resize(nteams);
+            std::iota(ord.begin(), ord.end(), 0);
+            wrkerord.resize(nteams);
+            for (auto& v : wrkerord) {
+                v.resize(nworkers);
+                std::iota(v.begin(), v.end(), 0);
+            }
+        }
+    }
+
+    for (int i = 0; i < nteams; ++i)
+    {
+        const int idx = LIpairV[i].second;
+        const int tid = ord[i];
+
+        const std::vector<int>& vi = vec[idx];
+        const int N = vi.size();
+
+        if (flag_verbose_mapper) {
+            Print() << "  Mapping bucket " << idx << " to rank " << tid << std::endl;
+        }
+
+        if (nteams == nprocs) {
+            for (int j = 0; j < N; ++j)
+            {
+                m_ref->m_pmap[vi[j]] = ParallelContext::local_to_global_rank(tid);
+            }
+        } else {
+#ifdef BL_USE_TEAM
+            int leadrank = tid * nworkers;
+            for (int w = 0; w < nworkers; ++w)
+            {
+                ParallelDescriptor::team_for(0, N, w, [&] (int j) {
+                        m_ref->m_pmap[vi[j]] = leadrank + wrkerord[i][w];
+                    });
+            }
+#endif
+        }
+    }
+
+    if (verbose)
+    {
+        amrex::Print() << "KNAPSACK efficiency: " << efficiency << '\n';
+    }
+
+}
 
 void
+DistributionMapping::KnapSackProcessorMap (const std::vector<Long>& wgts,
+                                           int                      nprocs,
+                                           const LayoutData<Real>&  rcost,
+                                           Real*                    efficiency,
+                                           bool                     do_full_knapsack,
+                                           int                      nmax,
+                                           bool                     sort,
+                                           bool                     skip_init)
+{
+    BL_ASSERT(wgts.size() > 0);
+
+    m_ref->clear();
+    m_ref->m_pmap.resize(wgts.size());
+
+    if (static_cast<int>(wgts.size()) <= nprocs || nprocs < 2)
+    {
+        RoundRobinProcessorMap(wgts.size(),nprocs, sort);
+
+        if (efficiency) *efficiency = 1;
+    }
+    else
+    {
+        Real eff = 0;
+        KnapSackDoIt(wgts, nprocs, rcost, eff, do_full_knapsack, nmax, sort);
+        if (efficiency) *efficiency = eff;
+    }
+}
+
+    void
 DistributionMapping::KnapSackProcessorMap (const std::vector<Long>& wgts,
                                            int                      nprocs,
                                            Real*                    efficiency,
@@ -869,6 +1134,7 @@ DistributionMapping::KnapSackProcessorMap (const std::vector<Long>& wgts,
     }
 }
 
+    
 void
 DistributionMapping::KnapSackProcessorMap (const BoxArray& boxes,
                                            int             nprocs)
@@ -890,6 +1156,7 @@ DistributionMapping::KnapSackProcessorMap (const BoxArray& boxes,
 
         Real effi = 0;
         bool do_full_knapsack = true;
+
         KnapSackDoIt(wgts, nprocs, effi, do_full_knapsack);
     }
 }
@@ -1416,7 +1683,8 @@ DistributionMapping::makeKnapSack (const Vector<Real>& rcost, int nmax)
     int nprocs = ParallelContext::NProcsSub();
     Real eff;
 
-    r.KnapSackProcessorMap(cost, nprocs, &eff, true, nmax);
+    r.KnapSackProcessorMap(cost, nprocs,
+                           &eff, true, nmax);
 
     return r;
 }
@@ -1438,8 +1706,8 @@ DistributionMapping::makeKnapSack (const Vector<Real>& rcost, Real& eff, int nma
     }
 
     int nprocs = ParallelContext::NProcsSub();
-
-    r.KnapSackProcessorMap(cost, nprocs, &eff, true, nmax, sort);
+    r.KnapSackProcessorMap(cost, nprocs,
+                           &eff, true, nmax, sort);
 
     return r;
 }
@@ -1447,10 +1715,10 @@ DistributionMapping::makeKnapSack (const Vector<Real>& rcost, Real& eff, int nma
 DistributionMapping
 DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost_local,
                                    Real& currentEfficiency, Real& proposedEfficiency,
-                                   int nmax, bool broadcastToAll, int root)
+                                   int nmax, bool broadcastToAll, int root, bool skip_init)
 {
     BL_PROFILE("makeKnapSack");
-
+    
     // Proposed distribution mapping is computed from global vector of costs on root;
     // required information is gathered on root from the layoutData information
     //
@@ -1458,7 +1726,7 @@ DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost_local,
     // 1. collect from rcost_local into the global cost vector rcost; then rcost is
     //    complete (only) on root
     // 2. (optional; default true) Broadcast processor map of the new dm to others
-
+    
     Vector<Real> rcost(rcost_local.size());
     ParallelDescriptor::GatherLayoutDataToVector<Real>(rcost_local, rcost, root);
     // rcost is now filled out on root
@@ -1478,7 +1746,7 @@ DistributionMapping::makeKnapSack (const LayoutData<Real>& rcost_local,
         // `sort` needs to be false here since there's a parallel reduce function
         // in the processor map function, but we are executing only on root
         int nprocs = ParallelDescriptor::NProcs();
-        r.KnapSackProcessorMap(cost, nprocs, &proposedEfficiency, true, nmax, false);
+        r.KnapSackProcessorMap(cost, nprocs, rcost_local, &proposedEfficiency, true, nmax, false, skip_init);
 
         ComputeDistributionMappingEfficiency(rcost_local.DistributionMap(),
                                              rcost,
@@ -1594,7 +1862,8 @@ DistributionMapping::makeKnapSack (const MultiFab& weight, int nmax)
     int nprocs = ParallelContext::NProcsSub();
     Real eff;
     DistributionMapping r;
-    r.KnapSackProcessorMap(cost, nprocs, &eff, true, nmax);
+    r.KnapSackProcessorMap(cost, nprocs,
+                           &eff, true, nmax);
     return r;
 }
 
